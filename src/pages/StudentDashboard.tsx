@@ -114,8 +114,8 @@ export default function StudentDashboard() {
       {assignments.length === 0 ? (
         <Card className="rounded-2xl kid-shadow">
           <CardContent className="pt-6 text-center">
-            <p className="text-lg text-muted-foreground font-semibold">No tasks assigned yet!</p>
-            <p className="text-muted-foreground">Ask your teacher to assign some verbs 🙂</p>
+            <p className="text-lg text-muted-foreground font-semibold">No tasks yet!</p>
+            <p className="text-muted-foreground">Your teacher will add verbs soon 🙂</p>
           </CardContent>
         </Card>
       ) : (
