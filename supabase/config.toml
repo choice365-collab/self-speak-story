@@ -1,0 +1,13 @@
+project_id = "bmexhrswlpfbykgpdacz"
+
+[functions.auth-login]
+verify_jwt = false
+
+[functions.create-user]
+verify_jwt = false
+
+[functions.speaking-ai]
+verify_jwt = false
+
+[functions.bootstrap-admin]
+verify_jwt = false
