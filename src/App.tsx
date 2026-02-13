@@ -20,7 +20,7 @@ function AppRoutes() {
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="text-center">
           <div className="text-4xl mb-4 animate-bounce-gentle">🗣️</div>
-          <p className="text-xl font-bold">Speak by Yourself</p>
+          <p className="text-xl font-bold">Now You Speak</p>
           <p className="text-muted-foreground">Loading...</p>
         </div>
       </div>

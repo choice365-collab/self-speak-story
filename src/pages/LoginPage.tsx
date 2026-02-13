@@ -35,7 +35,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md space-y-6 text-center">
           <div className="space-y-2">
             <h1 className="text-4xl font-black tracking-tight">
-              🗣️ Speak by Yourself
+              🗣️ Now You Speak
             </h1>
             <p className="text-lg text-muted-foreground font-semibold">
               English Speaking Practice
