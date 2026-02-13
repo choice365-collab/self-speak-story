@@ -74,6 +74,17 @@ serve(async (req) => {
         role: "student",
       });
 
+      // Auto-assign all existing verbs to this new student
+      const { data: allVerbs } = await supabase.from("verbs").select("id");
+      if (allVerbs && allVerbs.length > 0) {
+        const assignmentRows = allVerbs.map((v: any) => ({
+          student_id: newUser.user.id,
+          verb_id: v.id,
+          assigned_by: caller.id,
+        }));
+        await supabase.from("assignments").insert(assignmentRows);
+      }
+
       return new Response(JSON.stringify({ success: true, user_id: newUser.user.id }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { LogOut, Users, BookOpen, Upload, DollarSign, Plus, Clock } from "lucide-react";
+import { LogOut, Users, BookOpen, Upload, DollarSign, Clock } from "lucide-react";
 import * as XLSX from "xlsx";
 
 type Student = {
@@ -54,10 +54,6 @@ export default function AdminDashboard() {
   const [newStudentPin, setNewStudentPin] = useState("");
   const [newStudentQuota, setNewStudentQuota] = useState("10");
   const [creatingStudent, setCreatingStudent] = useState(false);
-
-  // Assign verb
-  const [selectedStudent, setSelectedStudent] = useState("");
-  const [selectedVerb, setSelectedVerb] = useState("");
 
   // Credit adjustment
   const [creditAmount, setCreditAmount] = useState("");
@@ -123,24 +119,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const assignVerb = async () => {
-    if (!selectedStudent || !selectedVerb) {
-      toast.error("Select a student and verb");
-      return;
-    }
-    const { error } = await supabase.from("assignments").insert({
-      student_id: selectedStudent,
-      verb_id: selectedVerb,
-      assigned_by: user?.id,
-    });
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success("Task assigned! ✅");
-      setSelectedStudent(""); setSelectedVerb("");
-      loadData();
-    }
-  };
+
 
   const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -176,10 +155,25 @@ export default function AdminDashboard() {
         return;
       }
 
-      const { error } = await supabase.from("verbs").insert(verbData);
+      const { data: insertedVerbs, error } = await supabase.from("verbs").insert(verbData).select("id");
       if (error) throw error;
 
-      toast.success(`${verbData.length} verbs uploaded! 📚`);
+      // Auto-assign new verbs to ALL existing students
+      if (insertedVerbs && insertedVerbs.length > 0 && students.length > 0) {
+        // Get existing assignments to prevent duplicates
+        const newVerbIds = insertedVerbs.map((v: any) => v.id);
+        const assignmentRows = students.flatMap((s) =>
+          newVerbIds.map((verbId: string) => ({
+            student_id: s.id,
+            verb_id: verbId,
+            assigned_by: user?.id,
+          }))
+        );
+        const { error: assignError } = await supabase.from("assignments").insert(assignmentRows);
+        if (assignError) console.error("Auto-assign error:", assignError);
+      }
+
+      toast.success(`${verbData.length} verbs uploaded & assigned to all students! 📚`);
       loadData();
     } catch (err: any) {
       toast.error(err.message || "Upload failed");
@@ -336,27 +330,13 @@ export default function AdminDashboard() {
         {/* Tasks Tab */}
         <TabsContent value="tasks" className="space-y-4">
           <Card className="rounded-2xl kid-shadow">
-            <CardHeader><CardTitle className="text-lg">📝 Assign Task</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <select value={selectedStudent} onChange={(e) => setSelectedStudent(e.target.value)}
-                className="w-full h-12 rounded-xl border bg-background px-3 text-base">
-                <option value="">Select Student</option>
-                {students.map((s) => (
-                  <option key={s.id} value={s.id}>{s.display_name} ({s.student_id})</option>
-                ))}
-              </select>
-              <select value={selectedVerb} onChange={(e) => setSelectedVerb(e.target.value)}
-                className="w-full h-12 rounded-xl border bg-background px-3 text-base">
-                <option value="">Select Verb</option>
-                {verbs.map((v) => (
-                  <option key={v.id} value={v.id}>{v.base_verb} - {v.meaning_en}</option>
-                ))}
-              </select>
-              <Button onClick={assignVerb} className="w-full h-12 rounded-xl font-bold text-base">
-                <Plus className="h-5 w-5 mr-2" /> Assign Task
-              </Button>
+            <CardContent className="pt-4 pb-3 text-center">
+              <p className="text-sm text-muted-foreground">
+                ✅ Assignments are created automatically when students or verbs are added.
+              </p>
             </CardContent>
           </Card>
+
 
           <h3 className="text-lg font-bold">📊 All Assignments</h3>
           {assignments.map((a) => (
