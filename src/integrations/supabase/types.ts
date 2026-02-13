@@ -278,6 +278,7 @@ export type Database = {
       }
       verbs: {
         Row: {
+          base_verb: string
           created_at: string
           created_by: string | null
           example_long_1: string | null
@@ -294,9 +295,10 @@ export type Database = {
           situation_3: string | null
           situation_4: string | null
           situation_5: string | null
-          verb: string
+          verb_key: string
         }
         Insert: {
+          base_verb: string
           created_at?: string
           created_by?: string | null
           example_long_1?: string | null
@@ -313,9 +315,10 @@ export type Database = {
           situation_3?: string | null
           situation_4?: string | null
           situation_5?: string | null
-          verb: string
+          verb_key: string
         }
         Update: {
+          base_verb?: string
           created_at?: string
           created_by?: string | null
           example_long_1?: string | null
@@ -332,7 +335,7 @@ export type Database = {
           situation_3?: string | null
           situation_4?: string | null
           situation_5?: string | null
-          verb?: string
+          verb_key?: string
         }
         Relationships: []
       }
