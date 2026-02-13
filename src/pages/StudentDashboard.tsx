@@ -12,7 +12,7 @@ type Assignment = {
   id: string;
   status: string;
   verb_id: string;
-  verbs: { verb: string; meaning_en: string | null; level: string | null } | null;
+  verbs: { verb_key: string; base_verb: string; meaning_en: string | null; level: string | null } | null;
 };
 
 export default function StudentDashboard() {
@@ -40,7 +40,7 @@ export default function StudentDashboard() {
     const [assignRes, usageRes] = await Promise.all([
       supabase
         .from("assignments")
-        .select("id, status, verb_id, verbs(verb, meaning_en, level)")
+        .select("id, status, verb_id, verbs(verb_key, base_verb, meaning_en, level)")
         .eq("student_id", user.id)
         .order("assigned_at", { ascending: false }),
       supabase
@@ -128,7 +128,7 @@ export default function StudentDashboard() {
                 <CardContent className="pt-5 pb-4">
                   <div className="flex items-center justify-between mb-2">
                     <div>
-                      <h3 className="text-xl font-bold capitalize">{a.verbs?.verb || "Unknown"}</h3>
+                      <h3 className="text-xl font-bold capitalize">{a.verbs?.base_verb || "Unknown"}</h3>
                       <p className="text-sm text-muted-foreground">{a.verbs?.meaning_en}</p>
                     </div>
                     <Badge variant={config.variant} className="text-sm px-3 py-1 rounded-full">

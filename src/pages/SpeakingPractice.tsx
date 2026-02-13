@@ -9,7 +9,8 @@ import { toast } from "sonner";
 import { ArrowLeft, Mic, MicOff, Volume2, CheckCircle } from "lucide-react";
 
 type VerbData = {
-  verb: string;
+  verb_key: string;
+  base_verb: string;
   meaning_en: string | null;
   example_short_1: string | null;
   example_short_2: string | null;
@@ -366,7 +367,7 @@ export default function SpeakingPractice() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-xl font-black capitalize">🗣️ {verbData.verb}</h1>
+          <h1 className="text-xl font-black capitalize">🗣️ {verbData.base_verb}</h1>
           <p className="text-sm text-muted-foreground">{verbData.meaning_en}</p>
         </div>
         <div className="ml-auto flex items-center gap-2">

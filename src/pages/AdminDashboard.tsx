@@ -19,7 +19,8 @@ type Student = {
 
 type Verb = {
   id: string;
-  verb: string;
+  verb_key: string;
+  base_verb: string;
   level: string | null;
   meaning_en: string | null;
 };
@@ -30,7 +31,7 @@ type AssignmentView = {
   student_id: string;
   verb_id: string;
   profiles: { student_id: string | null; display_name: string | null } | null;
-  verbs: { verb: string } | null;
+  verbs: { base_verb: string; meaning_en: string | null } | null;
 };
 
 type DailyUsageRow = {
@@ -73,8 +74,8 @@ export default function AdminDashboard() {
 
     const [studentsRes, verbsRes, assignmentsRes, creditRes, usageRes] = await Promise.all([
       supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes").eq("role", "student"),
-      supabase.from("verbs").select("id, verb, level, meaning_en").order("verb"),
-      supabase.from("assignments").select("id, status, student_id, verb_id, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(verb)"),
+      supabase.from("verbs").select("id, verb_key, base_verb, level, meaning_en").order("base_verb"),
+      supabase.from("assignments").select("id, status, student_id, verb_id, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)"),
       supabase.from("credit_balance").select("balance_usd").limit(1).maybeSingle(),
       supabase.from("daily_usage").select("student_id, used_seconds").eq("date", today),
     ]);
@@ -152,7 +153,8 @@ export default function AdminDashboard() {
       const rows = XLSX.utils.sheet_to_json<any>(ws);
 
       const verbData = rows.map((row: any) => ({
-        verb: row.verb || "",
+        verb_key: row.verb_key || "",
+        base_verb: row.base_verb || "",
         level: row.level || null,
         meaning_en: row.meaning_en || null,
         example_short_1: row.example_short_1 || null,
@@ -167,7 +169,7 @@ export default function AdminDashboard() {
         situation_4: row.situation_4 || null,
         situation_5: row.situation_5 || null,
         created_by: user?.id,
-      })).filter((v: any) => v.verb);
+      })).filter((v: any) => v.verb_key && v.base_verb);
 
       if (verbData.length === 0) {
         toast.error("No valid verbs found in file");
@@ -347,7 +349,7 @@ export default function AdminDashboard() {
                 className="w-full h-12 rounded-xl border bg-background px-3 text-base">
                 <option value="">Select Verb</option>
                 {verbs.map((v) => (
-                  <option key={v.id} value={v.id}>{v.verb} - {v.meaning_en}</option>
+                  <option key={v.id} value={v.id}>{v.base_verb} - {v.meaning_en}</option>
                 ))}
               </select>
               <Button onClick={assignVerb} className="w-full h-12 rounded-xl font-bold text-base">
@@ -362,7 +364,7 @@ export default function AdminDashboard() {
               <CardContent className="pt-4 pb-3 flex items-center justify-between">
                 <div>
                   <div className="font-bold">{a.profiles?.display_name || a.profiles?.student_id}</div>
-                  <div className="text-sm text-muted-foreground">{a.verbs?.verb}</div>
+                  <div className="text-sm text-muted-foreground">{a.verbs?.base_verb} - {a.verbs?.meaning_en}</div>
                 </div>
                 <Badge variant={a.status === "completed" ? "secondary" : a.status === "in_progress" ? "default" : "outline"}
                   className="rounded-full capitalize">{a.status.replace("_", " ")}</Badge>
@@ -377,7 +379,7 @@ export default function AdminDashboard() {
             <CardHeader><CardTitle className="text-lg">📤 Upload Verbs (Excel)</CardTitle></CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground mb-3">
-                Upload an Excel file with columns: verb, level, meaning_en, example_short_1~3, example_long_1~3, situation_1~5
+                Upload an Excel file with columns: verb_key, base_verb, level, meaning_en, example_short_1~3, example_long_1~3, situation_1~5
               </p>
               <label className="block">
                 <div className="flex items-center justify-center w-full h-16 rounded-xl border-2 border-dashed border-primary/30 hover:border-primary cursor-pointer transition-colors">
@@ -395,7 +397,7 @@ export default function AdminDashboard() {
               <Card key={v.id} className="rounded-xl kid-shadow">
                 <CardContent className="pt-3 pb-2 flex items-center justify-between">
                   <div>
-                    <span className="font-bold capitalize">{v.verb}</span>
+                    <span className="font-bold capitalize">{v.base_verb}</span>
                     <span className="text-sm text-muted-foreground ml-2">- {v.meaning_en}</span>
                   </div>
                   {v.level && <Badge variant="outline" className="rounded-full text-xs">{v.level}</Badge>}
