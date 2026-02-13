@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useNavigate } from "react-router-dom";
@@ -20,10 +20,9 @@ export default function StudentDashboard() {
   const navigate = useNavigate();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [dailyUsedSeconds, setDailyUsedSeconds] = useState(0);
+  const [dailyLimitSeconds, setDailyLimitSeconds] = useState(600);
   const [loading, setLoading] = useState(true);
 
-  const dailyLimitMinutes = profile?.daily_quota_minutes || 10;
-  const dailyLimitSeconds = dailyLimitMinutes * 60;
   const remainingSeconds = Math.max(0, dailyLimitSeconds - dailyUsedSeconds);
   const remainingMinutes = Math.floor(remainingSeconds / 60);
   const usagePercent = Math.min(100, (dailyUsedSeconds / dailyLimitSeconds) * 100);
@@ -38,21 +37,30 @@ export default function StudentDashboard() {
     if (!user) return;
     setLoading(true);
 
-    // Load assignments with verb data
-    const { data: assignmentData } = await supabase
-      .from("assignments")
-      .select("id, status, verb_id, verbs(verb, meaning_en, level)")
-      .eq("student_id", user.id)
-      .order("assigned_at", { ascending: false });
+    const [assignRes, usageRes] = await Promise.all([
+      supabase
+        .from("assignments")
+        .select("id, status, verb_id, verbs(verb, meaning_en, level)")
+        .eq("student_id", user.id)
+        .order("assigned_at", { ascending: false }),
+      supabase
+        .from("daily_usage")
+        .select("used_seconds, limit_seconds")
+        .eq("student_id", user.id)
+        .eq("date", new Date().toISOString().split("T")[0])
+        .maybeSingle(),
+    ]);
 
-    if (assignmentData) setAssignments(assignmentData as any);
-
-    // Load daily usage
-    const { data: usageData } = await supabase.rpc("get_daily_usage", {
-      _student_id: user.id,
-    });
-
-    if (usageData !== null) setDailyUsedSeconds(usageData);
+    if (assignRes.data) setAssignments(assignRes.data as any);
+    
+    if (usageRes.data) {
+      setDailyUsedSeconds(usageRes.data.used_seconds);
+      setDailyLimitSeconds(usageRes.data.limit_seconds);
+    } else {
+      // No record yet for today - use profile quota
+      setDailyUsedSeconds(0);
+      setDailyLimitSeconds((profile?.daily_quota_minutes || 10) * 60);
+    }
     setLoading(false);
   };
 
@@ -92,9 +100,9 @@ export default function StudentDashboard() {
           </div>
           <Progress value={usagePercent} className="h-4 rounded-full mb-2" />
           <div className="flex justify-between text-sm font-semibold">
-            <span>{Math.floor(dailyUsedSeconds / 60)} min used</span>
+            <span>{Math.floor(dailyUsedSeconds / 60)}m {dailyUsedSeconds % 60}s used</span>
             <span className={isBlocked ? "text-destructive" : "text-primary"}>
-              {isBlocked ? "⛔ Limit reached!" : `${remainingMinutes} min left`}
+              {isBlocked ? "⛔ Daily limit reached. Try again tomorrow!" : `${remainingMinutes}m ${remainingSeconds % 60}s left`}
             </span>
           </div>
         </CardContent>

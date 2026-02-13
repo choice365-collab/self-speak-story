@@ -33,12 +33,18 @@ type AssignmentView = {
   verbs: { verb: string } | null;
 };
 
+type DailyUsageRow = {
+  student_id: string;
+  used_seconds: number;
+};
+
 export default function AdminDashboard() {
   const { profile, logout, user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [verbs, setVerbs] = useState<Verb[]>([]);
   const [assignments, setAssignments] = useState<AssignmentView[]>([]);
-  const [settings, setSettings] = useState<Record<string, string>>({});
+  const [creditBalance, setCreditBalance] = useState(0);
+  const [todayUsage, setTodayUsage] = useState<DailyUsageRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   // New student form
@@ -52,30 +58,36 @@ export default function AdminDashboard() {
   const [selectedStudent, setSelectedStudent] = useState("");
   const [selectedVerb, setSelectedVerb] = useState("");
 
+  // Credit adjustment
+  const [creditAmount, setCreditAmount] = useState("");
+  const [creditNote, setCreditNote] = useState("");
+  const [creditType, setCreditType] = useState("topup");
+
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
     setLoading(true);
+    const today = new Date().toISOString().split("T")[0];
 
-    const [studentsRes, verbsRes, assignmentsRes, settingsRes] = await Promise.all([
+    const [studentsRes, verbsRes, assignmentsRes, creditRes, usageRes] = await Promise.all([
       supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes").eq("role", "student"),
       supabase.from("verbs").select("id, verb, level, meaning_en").order("verb"),
-      supabase.from("assignments").select("id, status, student_id, verb_id, profiles!assignments_student_id_fkey(student_id, display_name), verbs(verb)"),
-      supabase.from("admin_settings").select("key, value"),
+      supabase.from("assignments").select("id, status, student_id, verb_id, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(verb)"),
+      supabase.from("credit_balance").select("balance_usd").limit(1).maybeSingle(),
+      supabase.from("daily_usage").select("student_id, used_seconds").eq("date", today),
     ]);
 
     if (studentsRes.data) setStudents(studentsRes.data as Student[]);
     if (verbsRes.data) setVerbs(verbsRes.data as Verb[]);
     if (assignmentsRes.data) setAssignments(assignmentsRes.data as any);
-    if (settingsRes.data) {
-      const s: Record<string, string> = {};
-      settingsRes.data.forEach((r) => { s[r.key] = r.value; });
-      setSettings(s);
-    }
+    if (creditRes.data) setCreditBalance(Number(creditRes.data.balance_usd));
+    if (usageRes.data) setTodayUsage(usageRes.data as DailyUsageRow[]);
     setLoading(false);
   };
+
+  const totalUsedSecondsToday = todayUsage.reduce((sum, u) => sum + u.used_seconds, 0);
 
   const createStudent = async () => {
     if (!newStudentId || !newStudentPin || newStudentPin.length !== 4) {
@@ -173,10 +185,42 @@ export default function AdminDashboard() {
     e.target.value = "";
   };
 
-  const updateSetting = async (key: string, value: string) => {
-    await supabase.from("admin_settings").update({ value, updated_at: new Date().toISOString() }).eq("key", key);
-    setSettings((s) => ({ ...s, [key]: value }));
-    toast.success("Setting updated");
+  const adjustCredit = async () => {
+    const amount = parseFloat(creditAmount);
+    if (!amount || isNaN(amount)) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+
+    const signedAmount = creditType === "deduct" ? -Math.abs(amount) : Math.abs(amount);
+
+    // Insert credit event
+    const { error: eventError } = await supabase.from("credit_events").insert({
+      type: creditType,
+      amount_usd: signedAmount,
+      note: creditNote || null,
+    });
+    if (eventError) {
+      toast.error(eventError.message);
+      return;
+    }
+
+    // Update credit balance
+    const newBalance = creditBalance + signedAmount;
+    const { error: balanceError } = await supabase
+      .from("credit_balance")
+      .update({ balance_usd: newBalance, updated_at: new Date().toISOString() })
+      .not("id", "is", null); // update all (single row)
+
+    if (balanceError) {
+      toast.error(balanceError.message);
+      return;
+    }
+
+    setCreditBalance(newBalance);
+    setCreditAmount("");
+    setCreditNote("");
+    toast.success(`Credit ${creditType === "deduct" ? "deducted" : "added"}! 💰`);
   };
 
   if (loading) {
@@ -218,14 +262,14 @@ export default function AdminDashboard() {
         <Card className="rounded-2xl kid-shadow">
           <CardContent className="pt-4 pb-3 text-center">
             <Clock className="h-8 w-8 mx-auto mb-1 text-accent" />
-            <div className="text-3xl font-black">{assignments.filter(a => a.status === "completed").length}</div>
-            <div className="text-sm font-semibold text-muted-foreground">Completed</div>
+            <div className="text-3xl font-black">{Math.floor(totalUsedSecondsToday / 60)}m</div>
+            <div className="text-sm font-semibold text-muted-foreground">Used Today</div>
           </CardContent>
         </Card>
         <Card className="rounded-2xl kid-shadow">
           <CardContent className="pt-4 pb-3 text-center">
             <DollarSign className="h-8 w-8 mx-auto mb-1 text-success" />
-            <div className="text-3xl font-black">${settings.prepaid_credit_usd || "0"}</div>
+            <div className="text-3xl font-black">${creditBalance.toFixed(2)}</div>
             <div className="text-sm font-semibold text-muted-foreground">Credits</div>
           </CardContent>
         </Card>
@@ -236,7 +280,7 @@ export default function AdminDashboard() {
           <TabsTrigger value="students" className="flex-1 text-base font-bold rounded-xl">Students</TabsTrigger>
           <TabsTrigger value="tasks" className="flex-1 text-base font-bold rounded-xl">Tasks</TabsTrigger>
           <TabsTrigger value="verbs" className="flex-1 text-base font-bold rounded-xl">Verbs</TabsTrigger>
-          <TabsTrigger value="settings" className="flex-1 text-base font-bold rounded-xl">Settings</TabsTrigger>
+          <TabsTrigger value="credits" className="flex-1 text-base font-bold rounded-xl">Credits</TabsTrigger>
         </TabsList>
 
         {/* Students Tab */}
@@ -260,20 +304,31 @@ export default function AdminDashboard() {
           </Card>
 
           <h3 className="text-lg font-bold">📋 Student List</h3>
-          {students.map((s) => (
-            <Card key={s.id} className="rounded-2xl kid-shadow">
-              <CardContent className="pt-4 pb-3 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-lg">{s.display_name}</div>
-                  <div className="text-sm text-muted-foreground">ID: {s.student_id} | {s.daily_quota_minutes} min/day</div>
-                </div>
-                <Badge variant="outline" className="rounded-full">
-                  {assignments.filter(a => a.student_id === s.id && a.status === "completed").length}/
-                  {assignments.filter(a => a.student_id === s.id).length} done
-                </Badge>
-              </CardContent>
-            </Card>
-          ))}
+          {students.map((s) => {
+            const studentAssignments = assignments.filter(a => a.student_id === s.id);
+            const completed = studentAssignments.filter(a => a.status === "completed").length;
+            const studentUsage = todayUsage.find(u => u.student_id === s.id);
+            return (
+              <Card key={s.id} className="rounded-2xl kid-shadow">
+                <CardContent className="pt-4 pb-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <div>
+                      <div className="font-bold text-lg">{s.display_name}</div>
+                      <div className="text-sm text-muted-foreground">ID: {s.student_id} | {s.daily_quota_minutes} min/day</div>
+                    </div>
+                    <Badge variant="outline" className="rounded-full">
+                      {completed}/{studentAssignments.length} done
+                    </Badge>
+                  </div>
+                  {studentUsage && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Today: {Math.floor(studentUsage.used_seconds / 60)}m {studentUsage.used_seconds % 60}s used
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </TabsContent>
 
         {/* Tasks Tab */}
@@ -350,41 +405,31 @@ export default function AdminDashboard() {
           </div>
         </TabsContent>
 
-        {/* Settings Tab */}
-        <TabsContent value="settings" className="space-y-4">
+        {/* Credits Tab */}
+        <TabsContent value="credits" className="space-y-4">
           <Card className="rounded-2xl kid-shadow">
-            <CardHeader><CardTitle className="text-lg">⚙️ Settings</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="font-bold">Prepaid Credit (USD)</label>
-                <div className="flex gap-2">
-                  <Input value={settings.prepaid_credit_usd || "0"} 
-                    onChange={(e) => setSettings(s => ({...s, prepaid_credit_usd: e.target.value}))}
-                    className="h-12 rounded-xl text-base" type="number" />
-                  <Button onClick={() => updateSetting("prepaid_credit_usd", settings.prepaid_credit_usd || "0")}
-                    className="h-12 rounded-xl">Save</Button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="font-bold">Student Daily Limit (minutes)</label>
-                <div className="flex gap-2">
-                  <Input value={settings.student_daily_limit_minutes || "10"}
-                    onChange={(e) => setSettings(s => ({...s, student_daily_limit_minutes: e.target.value}))}
-                    className="h-12 rounded-xl text-base" type="number" />
-                  <Button onClick={() => updateSetting("student_daily_limit_minutes", settings.student_daily_limit_minutes || "10")}
-                    className="h-12 rounded-xl">Save</Button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="font-bold">Admin Daily Limit (minutes)</label>
-                <div className="flex gap-2">
-                  <Input value={settings.admin_daily_limit_minutes || "120"}
-                    onChange={(e) => setSettings(s => ({...s, admin_daily_limit_minutes: e.target.value}))}
-                    className="h-12 rounded-xl text-base" type="number" />
-                  <Button onClick={() => updateSetting("admin_daily_limit_minutes", settings.admin_daily_limit_minutes || "120")}
-                    className="h-12 rounded-xl">Save</Button>
-                </div>
-              </div>
+            <CardHeader><CardTitle className="text-lg">💰 Credit Balance</CardTitle></CardHeader>
+            <CardContent>
+              <div className="text-4xl font-black text-center mb-4">${creditBalance.toFixed(2)}</div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl kid-shadow">
+            <CardHeader><CardTitle className="text-lg">➕ Adjust Credit</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <select value={creditType} onChange={(e) => setCreditType(e.target.value)}
+                className="w-full h-12 rounded-xl border bg-background px-3 text-base">
+                <option value="topup">Top Up</option>
+                <option value="deduct">Deduct</option>
+                <option value="adjust">Adjust</option>
+              </select>
+              <Input type="number" value={creditAmount} onChange={(e) => setCreditAmount(e.target.value)}
+                placeholder="Amount (USD)" className="h-12 rounded-xl text-base" step="0.01" />
+              <Input value={creditNote} onChange={(e) => setCreditNote(e.target.value)}
+                placeholder="Note (optional)" className="h-12 rounded-xl text-base" />
+              <Button onClick={adjustCredit} className="w-full h-12 rounded-xl font-bold text-base">
+                Apply Credit Change
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

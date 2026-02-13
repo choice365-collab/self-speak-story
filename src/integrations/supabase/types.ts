@@ -65,10 +65,130 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "assignments_student_id_profiles_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "assignments_verb_id_fkey"
             columns: ["verb_id"]
             isOneToOne: false
             referencedRelation: "verbs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credit_balance: {
+        Row: {
+          balance_usd: number
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          balance_usd?: number
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          balance_usd?: number
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      credit_events: {
+        Row: {
+          amount_usd: number
+          created_at: string
+          id: string
+          note: string | null
+          type: string
+        }
+        Insert: {
+          amount_usd?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          type?: string
+        }
+        Update: {
+          amount_usd?: number
+          created_at?: string
+          id?: string
+          note?: string | null
+          type?: string
+        }
+        Relationships: []
+      }
+      daily_usage: {
+        Row: {
+          date: string
+          id: string
+          limit_seconds: number
+          student_id: string
+          used_seconds: number
+        }
+        Insert: {
+          date?: string
+          id?: string
+          limit_seconds?: number
+          student_id: string
+          used_seconds?: number
+        }
+        Update: {
+          date?: string
+          id?: string
+          limit_seconds?: number
+          student_id?: string
+          used_seconds?: number
+        }
+        Relationships: []
+      }
+      practice_logs: {
+        Row: {
+          ai_feedback: string | null
+          assignment_id: string | null
+          attempt_no: number
+          audio_seconds: number
+          created_at: string
+          id: string
+          result: string
+          situation_index: number
+          student_id: string
+          student_transcript: string | null
+        }
+        Insert: {
+          ai_feedback?: string | null
+          assignment_id?: string | null
+          attempt_no?: number
+          audio_seconds?: number
+          created_at?: string
+          id?: string
+          result?: string
+          situation_index?: number
+          student_id: string
+          student_transcript?: string | null
+        }
+        Update: {
+          ai_feedback?: string | null
+          assignment_id?: string | null
+          attempt_no?: number
+          audio_seconds?: number
+          created_at?: string
+          id?: string
+          result?: string
+          situation_index?: number
+          student_id?: string
+          student_transcript?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "practice_logs_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "assignments"
             referencedColumns: ["id"]
           },
         ]
