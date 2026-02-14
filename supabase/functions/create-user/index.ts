@@ -65,7 +65,7 @@ serve(async (req) => {
         role: "student",
         student_id: login_id,
         display_name: display_name || login_id,
-        daily_quota_minutes: daily_quota_minutes || 10,
+        daily_quota_minutes: daily_quota_minutes || 60,
         difficulty_level: difficulty_level || "medium",
         speech_speed: speech_speed || "medium",
       });
