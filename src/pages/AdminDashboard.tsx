@@ -60,7 +60,7 @@ export default function AdminDashboard() {
   const [newStudentId, setNewStudentId] = useState("");
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentPin, setNewStudentPin] = useState("");
-  const [newStudentQuota, setNewStudentQuota] = useState("10");
+  const [newStudentQuota, setNewStudentQuota] = useState("60");
   const [newStudentDifficulty, setNewStudentDifficulty] = useState<"low" | "medium" | "high">("medium");
   const [newStudentSpeed, setNewStudentSpeed] = useState<"slow" | "medium" | "fast">("medium");
   const [creatingStudent, setCreatingStudent] = useState(false);
@@ -154,7 +154,7 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       toast.success("Student created! 🎉");
-      setNewStudentId(""); setNewStudentName(""); setNewStudentPin(""); setNewStudentQuota("10"); setNewStudentDifficulty("medium"); setNewStudentSpeed("medium");
+      setNewStudentId(""); setNewStudentName(""); setNewStudentPin(""); setNewStudentQuota("60"); setNewStudentDifficulty("medium"); setNewStudentSpeed("medium");
       loadData();
     } catch (e: any) {
       toast.error(e.message);
@@ -208,7 +208,7 @@ export default function AdminDashboard() {
           // UPDATE existing student profile
           const updates: any = {};
           if (row.display_name !== undefined) updates.display_name = row.display_name;
-          if (row.daily_limit_min !== undefined) updates.daily_quota_minutes = parseInt(row.daily_limit_min) || 10;
+          if (row.daily_limit_min !== undefined) updates.daily_quota_minutes = parseInt(row.daily_limit_min) || 60;
           if (row.difficulty !== undefined && ["low", "medium", "high"].includes(row.difficulty)) updates.difficulty_level = row.difficulty;
           if (row.speed !== undefined && ["slow", "medium", "fast"].includes(row.speed)) updates.speech_speed = row.speed;
           if (Object.keys(updates).length > 0) {
