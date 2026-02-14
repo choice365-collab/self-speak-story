@@ -19,7 +19,7 @@ serve(async (req) => {
       });
     }
 
-    const { model = "gpt-4o-mini-realtime-preview", voice = "alloy" } = await req.json().catch(() => ({}));
+    const { model = "gpt-4o-mini-realtime-preview", voice = "alloy", instructions, turn_detection } = await req.json().catch(() => ({}));
 
     const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
       method: "POST",
@@ -27,7 +27,12 @@ serve(async (req) => {
         "Authorization": `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ model, voice }),
+      body: JSON.stringify({
+        model,
+        voice,
+        ...(instructions ? { instructions } : {}),
+        ...(turn_detection ? { turn_detection } : {}),
+      }),
     });
 
     if (!response.ok) {
