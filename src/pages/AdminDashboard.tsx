@@ -553,10 +553,49 @@ export default function AdminDashboard() {
         {/* Tasks Tab */}
         <TabsContent value="tasks" className="space-y-4">
           <Card className="rounded-2xl kid-shadow">
-            <CardContent className="pt-4 pb-3 text-center">
+            <CardContent className="pt-4 pb-3 space-y-3">
               <p className="text-sm text-muted-foreground">
                 ✅ Assignments are created automatically when students or verbs are added.
               </p>
+              <Button
+                variant="outline"
+                className="w-full h-12 rounded-xl font-bold text-base"
+                onClick={async () => {
+                  try {
+                    toast.info("Backfilling assignments...");
+                    const { data: activeVerbs } = await supabase
+                      .from("verbs").select("id").eq("is_active", true)
+                      .order("created_at", { ascending: true }).order("id", { ascending: true });
+                    if (!activeVerbs || activeVerbs.length === 0) { toast.info("No active verbs"); return; }
+
+                    let totalCreated = 0;
+                    for (const s of students) {
+                      const { data: existing } = await supabase
+                        .from("assignments").select("verb_id, task_no").eq("student_id", s.id);
+                      const existingVerbIds = new Set((existing || []).map(a => a.verb_id));
+                      const maxTaskNo = Math.max(0, ...(existing || []).map(a => a.task_no));
+                      const missing = activeVerbs.filter(v => !existingVerbIds.has(v.id));
+                      if (missing.length === 0) continue;
+
+                      const rows = missing.map((v, idx) => ({
+                        student_id: s.id,
+                        verb_id: v.id,
+                        assigned_by: user?.id,
+                        task_no: maxTaskNo + idx + 1,
+                      }));
+                      const { error } = await supabase.from("assignments").insert(rows);
+                      if (error) { console.error("Backfill error", s.id, error); continue; }
+                      totalCreated += rows.length;
+                    }
+                    toast.success(`Backfilled ${totalCreated} assignments! ✅`);
+                    loadData();
+                  } catch (err: any) {
+                    toast.error(err.message || "Backfill failed");
+                  }
+                }}
+              >
+                🔄 Backfill Missing Assignments
+              </Button>
             </CardContent>
           </Card>
 
