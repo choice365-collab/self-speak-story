@@ -44,9 +44,10 @@ export default function StudentDashboard() {
     const [assignRes, usageRes] = await Promise.all([
       supabase
         .from("assignments")
-        .select("id, status, verb_id, task_no, is_enabled, verbs(verb_key, base_verb, meaning_en)")
+        .select("id, status, verb_id, task_no, is_enabled, verbs!inner(verb_key, base_verb, meaning_en, is_active)")
         .eq("student_id", user.id)
         .eq("is_enabled", true)
+        .eq("verbs.is_active", true)
         .order("task_no", { ascending: true }),
       supabase
         .from("daily_usage")

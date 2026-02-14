@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock } from "lucide-react";
+import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock, Trash2 } from "lucide-react";
 import * as XLSX from "xlsx";
 
 type Student = {
@@ -24,6 +24,7 @@ type Verb = {
   verb_key: string;
   base_verb: string;
   meaning_en: string | null;
+  is_active: boolean;
 };
 
 type AssignmentView = {
@@ -79,7 +80,7 @@ export default function AdminDashboard() {
 
     const [studentsRes, verbsRes, assignmentsRes, creditRes, usageRes] = await Promise.all([
       supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed").eq("role", "student"),
-      supabase.from("verbs").select("id, verb_key, base_verb, meaning_en").order("base_verb"),
+      supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, is_active").order("base_verb"),
       supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
       supabase.from("credit_balance").select("balance_usd").limit(1).maybeSingle(),
       supabase.from("daily_usage").select("student_id, used_seconds").eq("date", today),
@@ -212,7 +213,7 @@ export default function AdminDashboard() {
 
       // Update existing verbs
       for (const v of toUpdate) {
-        const { created_by, ...updateData } = v;
+      const { created_by, verb_key, ...updateData } = v;
         await supabase.from("verbs").update(updateData).eq("verb_key", v.verb_key);
       }
 
@@ -495,16 +496,30 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
-          <h3 className="text-lg font-bold">📚 Verb List ({verbs.length})</h3>
+          <h3 className="text-lg font-bold">📚 Verb List ({verbs.filter(v => v.is_active).length} active / {verbs.length} total)</h3>
           <div className="space-y-2">
             {verbs.map((v) => (
-              <Card key={v.id} className="rounded-xl kid-shadow">
+              <Card key={v.id} className={`rounded-xl kid-shadow ${!v.is_active ? "opacity-50" : ""}`}>
                 <CardContent className="pt-3 pb-2 flex items-center justify-between">
                   <div>
                     <span className="font-bold capitalize">{v.base_verb}</span>
                     <span className="text-sm text-muted-foreground ml-2">- {v.meaning_en}</span>
+                    {!v.is_active && <Badge variant="outline" className="ml-2 text-xs rounded-full">Inactive</Badge>}
                   </div>
-                  
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-xl shrink-0"
+                    onClick={async () => {
+                      const newActive = !v.is_active;
+                      const { error } = await supabase.from("verbs").update({ is_active: newActive }).eq("id", v.id);
+                      if (error) { toast.error(error.message); return; }
+                      setVerbs(prev => prev.map(verb => verb.id === v.id ? { ...verb, is_active: newActive } : verb));
+                      toast.success(newActive ? "Verb restored ✅" : "Verb deactivated 🗑️");
+                    }}
+                  >
+                    <Trash2 className={`h-4 w-4 ${v.is_active ? "text-destructive" : "text-primary"}`} />
+                  </Button>
                 </CardContent>
               </Card>
             ))}
