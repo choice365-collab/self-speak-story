@@ -27,6 +27,7 @@ type Verb = {
   base_verb: string;
   meaning_en: string | null;
   is_active: boolean;
+  verb_no: number;
 };
 
 type AssignmentView = {
@@ -87,7 +88,7 @@ export default function AdminDashboard() {
 
     const [studentsRes, verbsRes, assignmentsRes, creditRes, usageRes] = await Promise.all([
       supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed").eq("role", "student"),
-      supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, is_active").order("base_verb"),
+      supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, is_active, verb_no").order("verb_no", { ascending: true }),
       supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
       supabase.from("credit_balance").select("balance_usd").limit(1).maybeSingle(),
       supabase.from("daily_usage").select("student_id, used_seconds").eq("date", today),
@@ -262,8 +263,8 @@ export default function AdminDashboard() {
   const downloadVerbLibrary = async () => {
     const { data, error } = await supabase
       .from("verbs")
-      .select("verb_key, base_verb, meaning_en, is_active, example_short_1, example_short_2, example_short_3, example_long_1, example_long_2, example_long_3, situation_1, situation_2, situation_3, situation_4, situation_5")
-      .order("created_at", { ascending: true });
+      .select("verb_no, verb_key, base_verb, meaning_en, is_active, example_short_1, example_short_2, example_short_3, example_long_1, example_long_2, example_long_3, situation_1, situation_2, situation_3, situation_4, situation_5")
+      .order("verb_no", { ascending: true });
     if (error || !data) {
       toast.error(error?.message || "Failed to load verbs");
       return;
@@ -780,6 +781,7 @@ export default function AdminDashboard() {
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="outline" className="rounded-full text-xs font-black px-1.5 py-0 shrink-0">#{v.verb_no}</Badge>
                             <span className={`font-bold capitalize ${!v.is_active ? "text-muted-foreground" : ""}`}>{v.base_verb}</span>
                             {v.is_active ? (
                               <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px] px-1.5 py-0">

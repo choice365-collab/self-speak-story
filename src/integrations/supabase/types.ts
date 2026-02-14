@@ -308,6 +308,7 @@ export type Database = {
           situation_4: string | null
           situation_5: string | null
           verb_key: string
+          verb_no: number
         }
         Insert: {
           base_verb: string
@@ -328,6 +329,7 @@ export type Database = {
           situation_4?: string | null
           situation_5?: string | null
           verb_key: string
+          verb_no: number
         }
         Update: {
           base_verb?: string
@@ -348,6 +350,7 @@ export type Database = {
           situation_4?: string | null
           situation_5?: string | null
           verb_key?: string
+          verb_no?: number
         }
         Relationships: []
       }
