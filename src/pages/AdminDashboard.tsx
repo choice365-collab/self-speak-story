@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { LogOut, Users, BookOpen, Upload, DollarSign, Clock } from "lucide-react";
+import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock } from "lucide-react";
 import * as XLSX from "xlsx";
 
 type Student = {
@@ -152,6 +152,22 @@ export default function AdminDashboard() {
 
 
 
+  const downloadVerbLibrary = async () => {
+    const { data, error } = await supabase
+      .from("verbs")
+      .select("verb_key, base_verb, meaning_en, example_short_1, example_short_2, example_short_3, example_long_1, example_long_2, example_long_3, situation_1, situation_2, situation_3, situation_4, situation_5")
+      .order("created_at", { ascending: true });
+    if (error || !data) {
+      toast.error(error?.message || "Failed to load verbs");
+      return;
+    }
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "verbs");
+    XLSX.writeFile(wb, "verb_library.xlsx");
+    toast.success("Downloaded verb_library.xlsx 📥");
+  };
+
   const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -162,7 +178,7 @@ export default function AdminDashboard() {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<any>(ws);
 
-      const verbData = rows.map((row: any) => ({
+      const verbRows = rows.map((row: any) => ({
         verb_key: row.verb_key || "",
         base_verb: row.base_verb || "",
         meaning_en: row.meaning_en || null,
@@ -180,20 +196,37 @@ export default function AdminDashboard() {
         created_by: user?.id,
       })).filter((v: any) => v.verb_key && v.base_verb);
 
-      if (verbData.length === 0) {
+      if (verbRows.length === 0) {
         toast.error("No valid verbs found in file");
         return;
       }
 
-      const { data: insertedVerbs, error } = await supabase.from("verbs").insert(verbData).select("id");
-      if (error) throw error;
+      // Separate into updates vs inserts by checking existing verb_keys
+      const { data: existingVerbs } = await supabase
+        .from("verbs")
+        .select("id, verb_key");
+      const existingMap = new Map((existingVerbs || []).map(v => [v.verb_key, v.id]));
 
-      // Auto-assign new verbs to ALL existing students with stable task_no
-      if (insertedVerbs && insertedVerbs.length > 0 && students.length > 0) {
-        const newVerbIds = insertedVerbs.map((v: any) => v.id);
-        
+      const toUpdate = verbRows.filter(v => existingMap.has(v.verb_key));
+      const toInsert = verbRows.filter(v => !existingMap.has(v.verb_key));
+
+      // Update existing verbs
+      for (const v of toUpdate) {
+        const { created_by, ...updateData } = v;
+        await supabase.from("verbs").update(updateData).eq("verb_key", v.verb_key);
+      }
+
+      // Insert new verbs
+      let newVerbIds: string[] = [];
+      if (toInsert.length > 0) {
+        const { data: insertedVerbs, error } = await supabase.from("verbs").insert(toInsert).select("id");
+        if (error) throw error;
+        newVerbIds = (insertedVerbs || []).map((v: any) => v.id);
+      }
+
+      // Auto-assign only NEW verbs to all students
+      if (newVerbIds.length > 0 && students.length > 0) {
         for (const s of students) {
-          // Get current max task_no for this student
           const { data: maxRow } = await supabase
             .from("assignments")
             .select("task_no")
@@ -201,9 +234,9 @@ export default function AdminDashboard() {
             .order("task_no", { ascending: false })
             .limit(1)
             .maybeSingle();
-          
+
           const startNo = (maxRow?.task_no || 0) + 1;
-          const assignmentRows = newVerbIds.map((verbId: string, idx: number) => ({
+          const assignmentRows = newVerbIds.map((verbId, idx) => ({
             student_id: s.id,
             verb_id: verbId,
             assigned_by: user?.id,
@@ -214,7 +247,7 @@ export default function AdminDashboard() {
         }
       }
 
-      toast.success(`${verbData.length} verbs uploaded & assigned to all students! 📚`);
+      toast.success(`${toUpdate.length} updated, ${toInsert.length} new verbs added! 📚`);
       loadData();
     } catch (err: any) {
       toast.error(err.message || "Upload failed");
@@ -442,9 +475,12 @@ export default function AdminDashboard() {
         <TabsContent value="verbs" className="space-y-4">
           <Card className="rounded-2xl kid-shadow">
             <CardHeader><CardTitle className="text-lg">📤 Upload Verbs (Excel)</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-3">
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground mb-1">
                 Upload an Excel file with columns: verb_key, base_verb, meaning_en, example_short_1~3, example_long_1~3, situation_1~5
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Existing verb_key → updated. New verb_key → inserted &amp; assigned to all students.
               </p>
               <label className="block">
                 <div className="flex items-center justify-center w-full h-16 rounded-xl border-2 border-dashed border-primary/30 hover:border-primary cursor-pointer transition-colors">
@@ -453,6 +489,9 @@ export default function AdminDashboard() {
                 </div>
                 <input type="file" accept=".xlsx,.xls,.csv" onChange={handleExcelUpload} className="hidden" />
               </label>
+              <Button variant="outline" onClick={downloadVerbLibrary} className="w-full h-12 rounded-xl font-bold text-base">
+                <Download className="h-5 w-5 mr-2" /> Download Verb Library (Excel)
+              </Button>
             </CardContent>
           </Card>
 
