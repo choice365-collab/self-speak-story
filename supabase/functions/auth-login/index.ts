@@ -10,7 +10,8 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { login_id, pin, password, role } = await req.json();
+    const { login_id: rawLoginId, pin, password, role } = await req.json();
+    const login_id = (rawLoginId || "").toLowerCase().trim();
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
