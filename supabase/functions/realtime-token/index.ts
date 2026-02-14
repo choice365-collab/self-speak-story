@@ -19,7 +19,7 @@ serve(async (req) => {
       });
     }
 
-    const { model = "gpt-4o-mini-realtime-preview", voice = "alloy", instructions, turn_detection } = await req.json().catch(() => ({}));
+    const { model = "gpt-4o-mini-realtime-preview", voice = "alloy", instructions, turn_detection, input_audio_transcription } = await req.json().catch(() => ({}));
 
     const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
       method: "POST",
@@ -32,6 +32,7 @@ serve(async (req) => {
         voice,
         ...(instructions ? { instructions } : {}),
         ...(turn_detection ? { turn_detection } : {}),
+        ...(input_audio_transcription ? { input_audio_transcription } : {}),
       }),
     });
 

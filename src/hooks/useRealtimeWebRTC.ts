@@ -1,34 +1,52 @@
 import { useState, useRef, useCallback } from "react";
 
-type ConnectionState = "idle" | "connecting" | "connected" | "error";
+type ConnectionState = "disconnected" | "connecting" | "connected" | "error";
 
-export type RealtimeEvent = {
-  type: string;
+export type TranscriptEntry = {
+  role: "user" | "ai";
+  text: string;
+  final: boolean;
   timestamp: number;
-  data?: any;
+};
+
+export type DebugEntry = {
+  label: string;
+  timestamp: number;
+  detail?: string;
 };
 
 export function useRealtimeWebRTC() {
-  const [state, setState] = useState<ConnectionState>("idle");
-  const [events, setEvents] = useState<RealtimeEvent[]>([]);
-  const [isMuted, setIsMuted] = useState(false);
+  const [state, setState] = useState<ConnectionState>("disconnected");
   const [error, setError] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
+  const [partialTranscript, setPartialTranscript] = useState<string>("");
+  const [debugLog, setDebugLog] = useState<DebugEntry[]>([]);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const aiSpeakingRef = useRef(false);
 
-  const addEvent = useCallback((type: string, data?: any) => {
-    setEvents((prev) => [...prev.slice(-49), { type, timestamp: Date.now(), data }]);
+  const addDebug = useCallback((label: string, detail?: string) => {
+    setDebugLog((prev) => [...prev.slice(-29), { label, timestamp: Date.now(), detail }]);
   }, []);
 
-  const connect = useCallback(async (model?: string, voice?: string) => {
+  const connect = useCallback(async (options?: { model?: string; voice?: string; instructions?: string }) => {
     setState("connecting");
     setError(null);
+    setTranscripts([]);
+    setPartialTranscript("");
+    addDebug("Requesting ephemeral token…");
 
     try {
-      // 1. Get ephemeral token from our edge function
+      // 1. Mic permission first
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      addDebug("Microphone granted");
+
+      // 2. Get ephemeral token
       const tokenRes = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/realtime-token`,
         {
@@ -37,62 +55,62 @@ export function useRealtimeWebRTC() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ model, voice }),
+          body: JSON.stringify({
+            model: options?.model || "gpt-4o-mini-realtime-preview",
+            voice: options?.voice || "alloy",
+            instructions: options?.instructions || "You are a friendly English conversation partner. Speak only in English. Be encouraging and patient. Keep responses concise.",
+            turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 500 },
+            input_audio_transcription: { model: "gpt-4o-mini-transcribe" },
+          }),
         }
       );
 
       if (!tokenRes.ok) {
-        const err = await tokenRes.json();
+        const err = await tokenRes.json().catch(() => ({}));
         throw new Error(err.error || `Token request failed: ${tokenRes.status}`);
       }
 
       const session = await tokenRes.json();
       const ephemeralKey = session.client_secret?.value;
       if (!ephemeralKey) throw new Error("No ephemeral key returned");
+      addDebug("Token received", `session: ${session.id?.slice(0, 12)}…`);
 
-      addEvent("session_created", { id: session.id });
-
-      // 2. Create peer connection
+      // 3. WebRTC peer connection
       const pc = new RTCPeerConnection();
       pcRef.current = pc;
 
-      // Remote audio playback
       const audio = document.createElement("audio");
       audio.autoplay = true;
       audioRef.current = audio;
 
       pc.ontrack = (e) => {
         audio.srcObject = e.streams[0];
-        addEvent("audio_track_received");
+        addDebug("AI audio track received");
       };
 
-      // 3. Get microphone
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-      addEvent("microphone_connected");
 
-      // 4. Data channel for events
+      // 4. Data channel
       const dc = pc.createDataChannel("oai-events");
       dcRef.current = dc;
 
-      dc.onopen = () => addEvent("data_channel_open");
+      dc.onopen = () => addDebug("Data channel open");
+
       dc.onmessage = (e) => {
         try {
           const event = JSON.parse(e.data);
-          addEvent(event.type, event);
+          handleServerEvent(event);
         } catch {
-          addEvent("data_channel_message", { raw: e.data });
+          // ignore
         }
       };
 
-      // 5. Create SDP offer and set local description
+      // 5. SDP exchange
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // 6. Send SDP to OpenAI Realtime API with ephemeral key
       const sdpRes = await fetch(
-        `https://api.openai.com/v1/realtime?model=${model || "gpt-4o-mini-realtime-preview"}`,
+        `https://api.openai.com/v1/realtime?model=${options?.model || "gpt-4o-mini-realtime-preview"}`,
         {
           method: "POST",
           headers: {
@@ -104,30 +122,97 @@ export function useRealtimeWebRTC() {
       );
 
       if (!sdpRes.ok) {
-        const errText = await sdpRes.text();
-        throw new Error(`SDP exchange failed: ${sdpRes.status} - ${errText}`);
+        throw new Error(`SDP exchange failed: ${sdpRes.status}`);
       }
 
       const answerSdp = await sdpRes.text();
       await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
 
       setState("connected");
-      addEvent("connected");
+      addDebug("WebRTC connected");
 
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
           setState("error");
           setError("Connection lost");
-          addEvent("disconnected");
+          addDebug("Connection lost", pc.connectionState);
         }
       };
     } catch (e: any) {
       console.error("WebRTC connect error:", e);
       setState("error");
       setError(e.message || "Failed to connect");
-      addEvent("error", { message: e.message });
+      addDebug("Error", e.message);
+      // Cleanup stream on error
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
     }
-  }, [addEvent]);
+  }, [addDebug]);
+
+  const handleServerEvent = useCallback((event: any) => {
+    const type = event.type as string;
+
+    switch (type) {
+      // User speech detected → barge-in: cancel AI response
+      case "input_audio_buffer.speech_started":
+        addDebug("User speaking…");
+        if (aiSpeakingRef.current) {
+          // Barge-in: cancel ongoing AI response
+          const dc = dcRef.current;
+          if (dc?.readyState === "open") {
+            dc.send(JSON.stringify({ type: "response.cancel" }));
+            addDebug("Barge-in → response.cancel sent");
+          }
+          aiSpeakingRef.current = false;
+        }
+        break;
+
+      case "input_audio_buffer.speech_stopped":
+        addDebug("User stopped speaking");
+        break;
+
+      // Live partial transcript of user speech
+      case "conversation.item.input_audio_transcription.completed":
+        {
+          const text = event.transcript?.trim();
+          if (text) {
+            setPartialTranscript("");
+            setTranscripts((prev) => [...prev, { role: "user", text, final: true, timestamp: Date.now() }]);
+            addDebug("User transcript", text.slice(0, 40));
+          }
+        }
+        break;
+
+      // AI started generating audio
+      case "response.audio.delta":
+        aiSpeakingRef.current = true;
+        break;
+
+      // AI finished speaking - show transcript
+      case "response.audio_transcript.done":
+        {
+          const text = event.transcript?.trim();
+          if (text) {
+            setTranscripts((prev) => [...prev, { role: "ai", text, final: true, timestamp: Date.now() }]);
+            addDebug("AI transcript", text.slice(0, 40));
+          }
+          aiSpeakingRef.current = false;
+        }
+        break;
+
+      case "response.done":
+        aiSpeakingRef.current = false;
+        break;
+
+      case "error":
+        addDebug("Server error", JSON.stringify(event.error)?.slice(0, 80));
+        break;
+
+      default:
+        // Ignore other events
+        break;
+    }
+  }, [addDebug]);
 
   const disconnect = useCallback(() => {
     dcRef.current?.close();
@@ -138,9 +223,11 @@ export function useRealtimeWebRTC() {
     dcRef.current = null;
     audioRef.current = null;
     streamRef.current = null;
-    setState("idle");
-    addEvent("disconnected_by_user");
-  }, [addEvent]);
+    aiSpeakingRef.current = false;
+    setState("disconnected");
+    setPartialTranscript("");
+    addDebug("Disconnected by user");
+  }, [addDebug]);
 
   const toggleMute = useCallback(() => {
     const stream = streamRef.current;
@@ -149,25 +236,19 @@ export function useRealtimeWebRTC() {
     if (track) {
       track.enabled = !track.enabled;
       setIsMuted(!track.enabled);
-      addEvent(track.enabled ? "unmuted" : "muted");
+      addDebug(track.enabled ? "Unmuted" : "Muted");
     }
-  }, [addEvent]);
-
-  const sendEvent = useCallback((event: Record<string, any>) => {
-    if (dcRef.current?.readyState === "open") {
-      dcRef.current.send(JSON.stringify(event));
-      addEvent("sent_event", event);
-    }
-  }, [addEvent]);
+  }, [addDebug]);
 
   return {
     state,
-    events,
-    isMuted,
     error,
+    isMuted,
+    transcripts,
+    partialTranscript,
+    debugLog,
     connect,
     disconnect,
     toggleMute,
-    sendEvent,
   };
 }
