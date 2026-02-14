@@ -632,8 +632,27 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Badge variant={a.status === "completed" ? "secondary" : a.status === "in_progress" ? "default" : "outline"}
-                    className="rounded-full capitalize text-xs">{a.status.replace("_", " ")}</Badge>
+                  <select
+                    value={a.status}
+                    onChange={async (ev) => {
+                      const newStatus = ev.target.value;
+                      const updates: any = { status: newStatus };
+                      if (newStatus === "completed") {
+                        updates.completed_at = new Date().toISOString();
+                      } else {
+                        updates.completed_at = null;
+                      }
+                      const { error } = await supabase.from("assignments").update(updates).eq("id", a.id);
+                      if (error) { toast.error(error.message); return; }
+                      setAssignments(prev => prev.map(x => x.id === a.id ? { ...x, ...updates } : x));
+                      toast.success(`Status → ${newStatus.replace("_", " ")}`);
+                    }}
+                    className="h-7 rounded-lg border bg-background px-1.5 text-xs font-semibold capitalize"
+                  >
+                    <option value="not_started">Not Started</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                  </select>
                   <button
                     onClick={() => toggleAssignmentEnabled(a.id, a.is_enabled)}
                     className={`w-10 h-6 rounded-full transition-colors ${a.is_enabled ? "bg-primary" : "bg-muted"}`}
