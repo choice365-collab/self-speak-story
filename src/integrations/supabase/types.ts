@@ -300,6 +300,7 @@ export type Database = {
           example_short_2: string | null
           example_short_3: string | null
           id: string
+          is_active: boolean
           meaning_en: string | null
           situation_1: string | null
           situation_2: string | null
@@ -319,6 +320,7 @@ export type Database = {
           example_short_2?: string | null
           example_short_3?: string | null
           id?: string
+          is_active?: boolean
           meaning_en?: string | null
           situation_1?: string | null
           situation_2?: string | null
@@ -338,6 +340,7 @@ export type Database = {
           example_short_2?: string | null
           example_short_3?: string | null
           id?: string
+          is_active?: boolean
           meaning_en?: string | null
           situation_1?: string | null
           situation_2?: string | null
