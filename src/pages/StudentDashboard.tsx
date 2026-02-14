@@ -26,6 +26,8 @@ export default function StudentDashboard() {
   const [dailyLimitSeconds, setDailyLimitSeconds] = useState(600);
   const [loading, setLoading] = useState(true);
   const [goToTask, setGoToTask] = useState("");
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
 
   const remainingSeconds = Math.max(0, dailyLimitSeconds - dailyUsedSeconds);
   const remainingMinutes = Math.floor(remainingSeconds / 60);
@@ -122,26 +124,38 @@ export default function StudentDashboard() {
         <Mic className="h-6 w-6" /> Free Voice Chat 🎙️
       </Button>
 
-      {/* Assignments */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-black">📚 My Tasks</h2>
+      <div className="mb-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-black">📚 My Tasks</h2>
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              placeholder="Go to #"
+              value={goToTask}
+              onChange={(e) => setGoToTask(e.target.value)}
+              className="w-20 h-10 rounded-xl text-base text-center"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-xl h-10"
+              onClick={() => {
+                const el = document.getElementById(`task-${goToTask}`);
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+              }}
+            >Go</Button>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
-          <Input
-            type="number"
-            placeholder="Go to #"
-            value={goToTask}
-            onChange={(e) => setGoToTask(e.target.value)}
-            className="w-20 h-10 rounded-xl text-base text-center"
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            className="rounded-xl h-10"
-            onClick={() => {
-              const el = document.getElementById(`task-${goToTask}`);
-              if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-            }}
-          >Go</Button>
+          <span className="text-sm font-semibold text-muted-foreground shrink-0">Range:</span>
+          <Input type="number" placeholder="From #" value={filterFrom}
+            onChange={(e) => setFilterFrom(e.target.value)} className="h-9 rounded-xl text-sm flex-1" />
+          <span className="text-muted-foreground">–</span>
+          <Input type="number" placeholder="To #" value={filterTo}
+            onChange={(e) => setFilterTo(e.target.value)} className="h-9 rounded-xl text-sm flex-1" />
+          {(filterFrom || filterTo) && (
+            <Button size="sm" variant="ghost" className="rounded-xl text-xs h-9 px-2" onClick={() => { setFilterFrom(""); setFilterTo(""); }}>Clear</Button>
+          )}
         </div>
       </div>
 
@@ -154,7 +168,21 @@ export default function StudentDashboard() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {assignments.map((a) => {
+          {(() => {
+            const from = parseInt(filterFrom);
+            const to = parseInt(filterTo);
+            const filtered = assignments.filter(a => {
+              if (!isNaN(from) && a.task_no < from) return false;
+              if (!isNaN(to) && a.task_no > to) return false;
+              return true;
+            });
+            return filtered.length === 0 ? (
+              <Card className="rounded-2xl kid-shadow">
+                <CardContent className="pt-6 text-center">
+                  <p className="text-muted-foreground font-semibold">No tasks in this range</p>
+                </CardContent>
+              </Card>
+            ) : filtered.map((a) => {
             const config = statusConfig[a.status as keyof typeof statusConfig] || statusConfig.not_started;
             const StatusIcon = config.icon;
             return (
@@ -185,7 +213,8 @@ export default function StudentDashboard() {
                 </CardContent>
               </Card>
             );
-          })}
+          });
+          })()}
         </div>
       )}
     </div>
