@@ -8,6 +8,8 @@ type Profile = {
   student_id: string | null;
   admin_id: string | null;
   daily_quota_minutes: number;
+  difficulty_level: string;
+  speech_speed: string;
 };
 
 type AuthContextType = {
@@ -30,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchProfile = async (userId: string) => {
     const { data } = await supabase
       .from("profiles")
-      .select("role, display_name, student_id, admin_id, daily_quota_minutes")
+      .select("role, display_name, student_id, admin_id, daily_quota_minutes, difficulty_level, speech_speed")
       .eq("id", userId)
       .single();
     if (data) setProfile(data as Profile);

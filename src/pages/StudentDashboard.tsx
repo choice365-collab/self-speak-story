@@ -15,7 +15,7 @@ type Assignment = {
   verb_id: string;
   task_no: number;
   is_enabled: boolean;
-  verbs: { verb_key: string; base_verb: string; meaning_en: string | null; level: string | null } | null;
+  verbs: { verb_key: string; base_verb: string; meaning_en: string | null } | null;
 };
 
 export default function StudentDashboard() {
@@ -44,7 +44,7 @@ export default function StudentDashboard() {
     const [assignRes, usageRes] = await Promise.all([
       supabase
         .from("assignments")
-        .select("id, status, verb_id, task_no, is_enabled, verbs(verb_key, base_verb, meaning_en, level)")
+        .select("id, status, verb_id, task_no, is_enabled, verbs(verb_key, base_verb, meaning_en)")
         .eq("student_id", user.id)
         .eq("is_enabled", true)
         .order("task_no", { ascending: true }),
@@ -172,11 +172,6 @@ export default function StudentDashboard() {
                       {config.label}
                     </Badge>
                   </div>
-                  {a.verbs?.level && (
-                    <Badge variant="outline" className="text-xs rounded-full mr-2">
-                      Level: {a.verbs.level}
-                    </Badge>
-                  )}
                   {a.status !== "completed" && (
                     <Button
                       onClick={() => navigate(`/practice/${a.id}`)}

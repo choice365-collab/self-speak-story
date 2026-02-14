@@ -204,27 +204,33 @@ export type Database = {
           admin_id: string | null
           created_at: string
           daily_quota_minutes: number
+          difficulty_level: Database["public"]["Enums"]["difficulty_level"]
           display_name: string | null
           id: string
           role: Database["public"]["Enums"]["app_role"]
+          speech_speed: Database["public"]["Enums"]["speech_speed"]
           student_id: string | null
         }
         Insert: {
           admin_id?: string | null
           created_at?: string
           daily_quota_minutes?: number
+          difficulty_level?: Database["public"]["Enums"]["difficulty_level"]
           display_name?: string | null
           id: string
           role: Database["public"]["Enums"]["app_role"]
+          speech_speed?: Database["public"]["Enums"]["speech_speed"]
           student_id?: string | null
         }
         Update: {
           admin_id?: string | null
           created_at?: string
           daily_quota_minutes?: number
+          difficulty_level?: Database["public"]["Enums"]["difficulty_level"]
           display_name?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          speech_speed?: Database["public"]["Enums"]["speech_speed"]
           student_id?: string | null
         }
         Relationships: []
@@ -294,7 +300,6 @@ export type Database = {
           example_short_2: string | null
           example_short_3: string | null
           id: string
-          level: string | null
           meaning_en: string | null
           situation_1: string | null
           situation_2: string | null
@@ -314,7 +319,6 @@ export type Database = {
           example_short_2?: string | null
           example_short_3?: string | null
           id?: string
-          level?: string | null
           meaning_en?: string | null
           situation_1?: string | null
           situation_2?: string | null
@@ -334,7 +338,6 @@ export type Database = {
           example_short_2?: string | null
           example_short_3?: string | null
           id?: string
-          level?: string | null
           meaning_en?: string | null
           situation_1?: string | null
           situation_2?: string | null
@@ -368,6 +371,8 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "student"
+      difficulty_level: "low" | "medium" | "high"
+      speech_speed: "slow" | "medium" | "fast"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -496,6 +501,8 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "student"],
+      difficulty_level: ["low", "medium", "high"],
+      speech_speed: ["slow", "medium", "fast"],
     },
   },
 } as const

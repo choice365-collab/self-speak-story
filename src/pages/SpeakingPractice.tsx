@@ -34,13 +34,35 @@ type TranscriptEntry = {
 const REQUIRED_PASSES = 3;
 const TARGET_SECONDS = 300;
 
-function buildSystemInstructions(verb: VerbData): string {
+function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
   const situations = [verb.situation_1, verb.situation_2, verb.situation_3, verb.situation_4, verb.situation_5].filter(Boolean);
   const examples = [verb.example_short_1, verb.example_short_2, verb.example_short_3].filter(Boolean);
   const longExamples = [verb.example_long_1, verb.example_long_2, verb.example_long_3].filter(Boolean);
 
+  // Difficulty adjustments
+  const difficultyGuides: Record<string, string> = {
+    low: "Use only simple sentences (subject + verb + object). Avoid complex grammar, conditionals, or passive voice. Use basic vocabulary only.",
+    medium: "Use moderate grammar complexity. You may use simple compound sentences and common expressions. Keep vocabulary accessible.",
+    high: "Use natural, varied grammar including compound/complex sentences, conditionals, and idiomatic expressions. Challenge the student.",
+  };
+  const difficultyGuide = difficultyGuides[difficultyLevel] || difficultyGuides["medium"];
+
+  // Speech speed adjustments
+  const speedGuides: Record<string, string> = {
+    slow: "Speak VERY slowly and clearly. Use SHORT sentences (5-8 words max). Pause between sentences. Repeat key phrases.",
+    medium: "Speak at a moderate pace. Use sentences of normal length. Be clear but natural.",
+    fast: "Speak at a natural, conversational pace. Use longer sentences when appropriate. Keep the conversation flowing quickly.",
+  };
+  const speedGuide = speedGuides[speechSpeed] || speedGuides["medium"];
+
   return `You are a friendly, encouraging English teacher helping a Korean student practice speaking English.
-You ONLY speak English. Keep your language simple and clear. Speak at a slightly slow pace.
+You ONLY speak English.
+
+DIFFICULTY LEVEL: ${difficultyLevel.toUpperCase()}
+${difficultyGuide}
+
+SPEAKING PACE: ${speechSpeed.toUpperCase()}
+${speedGuide}
 
 The student is learning the phrasal verb: "${verb.base_verb}"
 Meaning: ${verb.meaning_en || ""}
@@ -167,7 +189,7 @@ export default function SpeakingPractice() {
     setError(null);
 
     try {
-      const instructions = buildSystemInstructions(verbData);
+      const instructions = buildSystemInstructions(verbData, profile?.difficulty_level || "medium", profile?.speech_speed || "medium");
 
       const tokenRes = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/realtime-token`,
