@@ -41,8 +41,10 @@ export type Database = {
           assigned_by: string | null
           completed_at: string | null
           id: string
+          is_enabled: boolean
           status: string
           student_id: string
+          task_no: number
           verb_id: string
         }
         Insert: {
@@ -50,8 +52,10 @@ export type Database = {
           assigned_by?: string | null
           completed_at?: string | null
           id?: string
+          is_enabled?: boolean
           status?: string
           student_id: string
+          task_no: number
           verb_id: string
         }
         Update: {
@@ -59,8 +63,10 @@ export type Database = {
           assigned_by?: string | null
           completed_at?: string | null
           id?: string
+          is_enabled?: boolean
           status?: string
           student_id?: string
+          task_no?: number
           verb_id?: string
         }
         Relationships: [
