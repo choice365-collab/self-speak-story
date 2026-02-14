@@ -338,33 +338,33 @@ export default function AdminDashboard() {
         return { ...rest, created_by, is_active: v.is_active ?? true };
       });
 
-      let newVerbIds: string[] = [];
+      let newVerbIds: { id: string; verb_no: number }[] = [];
       if (insertRows.length > 0) {
-        const { data: insertedVerbs, error } = await supabase.from("verbs").insert(insertRows).select("id");
+        const { data: insertedVerbs, error } = await supabase.from("verbs").insert(insertRows).select("id, verb_no");
         if (error) throw error;
-        newVerbIds = (insertedVerbs || []).map((v: any) => v.id);
+        newVerbIds = (insertedVerbs || []) as { id: string; verb_no: number }[];
       }
 
-      // Auto-assign only NEW verbs to all students
+      // Auto-assign NEW verbs to all students using verb_no as task_no
       if (newVerbIds.length > 0 && students.length > 0) {
         for (const s of students) {
-          const { data: maxRow } = await supabase
-            .from("assignments")
-            .select("task_no")
-            .eq("student_id", s.id)
-            .order("task_no", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          // Get existing verb_ids for this student to avoid duplicates
+          const { data: existing } = await supabase
+            .from("assignments").select("verb_id").eq("student_id", s.id);
+          const existingVerbIds = new Set((existing || []).map(a => a.verb_id));
 
-          const startNo = (maxRow?.task_no || 0) + 1;
-          const assignmentRows = newVerbIds.map((verbId, idx) => ({
-            student_id: s.id,
-            verb_id: verbId,
-            assigned_by: user?.id,
-            task_no: startNo + idx,
-          }));
-          const { error: assignError } = await supabase.from("assignments").insert(assignmentRows);
-          if (assignError) console.error("Auto-assign error for student", s.id, assignError);
+          const assignmentRows = newVerbIds
+            .filter(v => !existingVerbIds.has(v.id))
+            .map(v => ({
+              student_id: s.id,
+              verb_id: v.id,
+              assigned_by: user?.id,
+              task_no: v.verb_no,
+            }));
+          if (assignmentRows.length > 0) {
+            const { error: assignError } = await supabase.from("assignments").insert(assignmentRows);
+            if (assignError) console.error("Auto-assign error for student", s.id, assignError);
+          }
         }
       }
 
@@ -554,49 +554,10 @@ export default function AdminDashboard() {
         {/* Tasks Tab */}
         <TabsContent value="tasks" className="space-y-4">
           <Card className="rounded-2xl kid-shadow">
-            <CardContent className="pt-4 pb-3 space-y-3">
+            <CardContent className="pt-4 pb-3">
               <p className="text-sm text-muted-foreground">
                 ✅ Assignments are created automatically when students or verbs are added.
               </p>
-              <Button
-                variant="outline"
-                className="w-full h-12 rounded-xl font-bold text-base"
-                onClick={async () => {
-                  try {
-                    toast.info("Backfilling assignments...");
-                    const { data: activeVerbs } = await supabase
-                      .from("verbs").select("id").eq("is_active", true)
-                      .order("created_at", { ascending: true }).order("id", { ascending: true });
-                    if (!activeVerbs || activeVerbs.length === 0) { toast.info("No active verbs"); return; }
-
-                    let totalCreated = 0;
-                    for (const s of students) {
-                      const { data: existing } = await supabase
-                        .from("assignments").select("verb_id, task_no").eq("student_id", s.id);
-                      const existingVerbIds = new Set((existing || []).map(a => a.verb_id));
-                      const maxTaskNo = Math.max(0, ...(existing || []).map(a => a.task_no));
-                      const missing = activeVerbs.filter(v => !existingVerbIds.has(v.id));
-                      if (missing.length === 0) continue;
-
-                      const rows = missing.map((v, idx) => ({
-                        student_id: s.id,
-                        verb_id: v.id,
-                        assigned_by: user?.id,
-                        task_no: maxTaskNo + idx + 1,
-                      }));
-                      const { error } = await supabase.from("assignments").insert(rows);
-                      if (error) { console.error("Backfill error", s.id, error); continue; }
-                      totalCreated += rows.length;
-                    }
-                    toast.success(`Backfilled ${totalCreated} assignments! ✅`);
-                    loadData();
-                  } catch (err: any) {
-                    toast.error(err.message || "Backfill failed");
-                  }
-                }}
-              >
-                🔄 Backfill Missing Assignments
-              </Button>
             </CardContent>
           </Card>
 
