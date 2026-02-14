@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock, Search, CheckCircle2, XCircle } from "lucide-react";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import * as XLSX from "xlsx";
 
@@ -157,6 +158,105 @@ export default function AdminDashboard() {
     }
   };
 
+  // ---- Student Excel Export ----
+  const downloadStudents = async () => {
+    const rows = students.map(s => ({
+      student_id: s.student_id || "",
+      display_name: s.display_name || "",
+      pin: "",
+      daily_limit_min: s.daily_quota_minutes,
+      difficulty: s.difficulty_level,
+      speed: s.speech_speed,
+      is_active: true,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "students");
+    XLSX.writeFile(wb, "students.xlsx");
+    toast.success("Downloaded students.xlsx 📥");
+  };
+
+  // ---- Student Excel Import ----
+  const handleStudentExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<any>(ws);
+
+      if (rows.length === 0) { toast.error("No rows found"); return; }
+
+      const session = (await supabase.auth.getSession()).data.session;
+      if (!session) { toast.error("Not authenticated"); return; }
+
+      let created = 0, updated = 0;
+
+      for (const row of rows) {
+        const sid = String(row.student_id || "").trim();
+        if (!sid) continue;
+
+        const existing = students.find(s => s.student_id === sid);
+
+        if (existing) {
+          // UPDATE existing student profile
+          const updates: any = {};
+          if (row.display_name !== undefined) updates.display_name = row.display_name;
+          if (row.daily_limit_min !== undefined) updates.daily_quota_minutes = parseInt(row.daily_limit_min) || 10;
+          if (row.difficulty !== undefined && ["low", "medium", "high"].includes(row.difficulty)) updates.difficulty_level = row.difficulty;
+          if (row.speed !== undefined && ["slow", "medium", "fast"].includes(row.speed)) updates.speech_speed = row.speed;
+          if (Object.keys(updates).length > 0) {
+            await supabase.from("profiles").update(updates).eq("id", existing.id);
+          }
+          updated++;
+        } else {
+          // INSERT new student via create-user edge function
+          const pin = String(row.pin || "").padStart(4, "0");
+          if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+            toast.error(`Skipped ${sid}: invalid PIN "${row.pin}"`);
+            continue;
+          }
+          const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              role: "student",
+              login_id: sid,
+              pin,
+              display_name: row.display_name || sid,
+              daily_quota_minutes: parseInt(row.daily_limit_min) || 10,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            toast.error(`Failed ${sid}: ${data.error}`);
+            continue;
+          }
+
+          // Update difficulty/speed if provided (create-user defaults to medium/medium)
+          if (data.user_id) {
+            const extraUpdates: any = {};
+            if (row.difficulty && ["low", "medium", "high"].includes(row.difficulty)) extraUpdates.difficulty_level = row.difficulty;
+            if (row.speed && ["slow", "medium", "fast"].includes(row.speed)) extraUpdates.speech_speed = row.speed;
+            if (Object.keys(extraUpdates).length > 0) {
+              await supabase.from("profiles").update(extraUpdates).eq("id", data.user_id);
+            }
+          }
+          created++;
+        }
+      }
+
+      toast.success(`${created} created, ${updated} updated! 🎉`);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || "Upload failed");
+    }
+    e.target.value = "";
+  };
 
 
   const downloadVerbLibrary = async () => {
@@ -385,10 +485,36 @@ export default function AdminDashboard() {
               <Input type="tel" value={newStudentPin}
                 onChange={(e) => setNewStudentPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
                 placeholder="4-digit PIN" maxLength={4} className="h-12 rounded-xl text-base tracking-widest" />
-              <Input type="number" value={newStudentQuota} onChange={(e) => setNewStudentQuota(e.target.value)}
-                placeholder="Daily minutes (default: 10)" className="h-12 rounded-xl text-base" />
+              <div className="space-y-1.5">
+                <Label className="text-sm font-semibold">Daily Speaking Limit</Label>
+                <div className="relative">
+                  <Input type="number" value={newStudentQuota} onChange={(e) => setNewStudentQuota(e.target.value)}
+                    placeholder="10" className="h-12 rounded-xl text-base pr-20" />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">min/day</span>
+                </div>
+              </div>
               <Button onClick={createStudent} disabled={creatingStudent} className="w-full h-12 rounded-xl font-bold text-base">
                 {creatingStudent ? "Creating..." : "Create Student"}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Student Excel Import/Export */}
+          <Card className="rounded-2xl kid-shadow">
+            <CardHeader><CardTitle className="text-lg">📤 Upload / Download Students</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Columns: student_id (required), display_name, pin (required for new), daily_limit_min, difficulty, speed, is_active
+              </p>
+              <label className="block">
+                <div className="flex items-center justify-center w-full h-14 rounded-xl border-2 border-dashed border-primary/30 hover:border-primary cursor-pointer transition-colors">
+                  <Upload className="h-5 w-5 mr-2 text-primary" />
+                  <span className="font-bold text-primary">Upload Students (Excel)</span>
+                </div>
+                <input type="file" accept=".xlsx,.xls,.csv" onChange={handleStudentExcelUpload} className="hidden" />
+              </label>
+              <Button variant="outline" onClick={downloadStudents} className="w-full h-12 rounded-xl font-bold text-base">
+                <Download className="h-5 w-5 mr-2" /> Download Students (Excel)
               </Button>
             </CardContent>
           </Card>
