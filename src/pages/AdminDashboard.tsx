@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock, Trash2 } from "lucide-react";
+import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock, Search } from "lucide-react";
 import * as XLSX from "xlsx";
 
 type Student = {
@@ -69,6 +69,11 @@ export default function AdminDashboard() {
   const [selectedStudentId, setSelectedStudentId] = useState<string>("");
   const [taskRangeFrom, setTaskRangeFrom] = useState("");
   const [taskRangeTo, setTaskRangeTo] = useState("");
+
+  // Verb filter & selection
+  const [verbSearch, setVerbSearch] = useState("");
+  const [verbFilterStatus, setVerbFilterStatus] = useState<"all" | "active" | "inactive">("all");
+  const [selectedVerbIds, setSelectedVerbIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadData();
@@ -156,7 +161,7 @@ export default function AdminDashboard() {
   const downloadVerbLibrary = async () => {
     const { data, error } = await supabase
       .from("verbs")
-      .select("verb_key, base_verb, meaning_en, example_short_1, example_short_2, example_short_3, example_long_1, example_long_2, example_long_3, situation_1, situation_2, situation_3, situation_4, situation_5")
+      .select("verb_key, base_verb, meaning_en, is_active, example_short_1, example_short_2, example_short_3, example_long_1, example_long_2, example_long_3, situation_1, situation_2, situation_3, situation_4, situation_5")
       .order("created_at", { ascending: true });
     if (error || !data) {
       toast.error(error?.message || "Failed to load verbs");
@@ -183,6 +188,7 @@ export default function AdminDashboard() {
         verb_key: row.verb_key || "",
         base_verb: row.base_verb || "",
         meaning_en: row.meaning_en || null,
+        is_active: row.is_active === false || row.is_active === "false" || row.is_active === 0 ? false : true,
         example_short_1: row.example_short_1 || null,
         example_short_2: row.example_short_2 || null,
         example_short_3: row.example_short_3 || null,
@@ -478,7 +484,7 @@ export default function AdminDashboard() {
             <CardHeader><CardTitle className="text-lg">📤 Upload Verbs (Excel)</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground mb-1">
-                Upload an Excel file with columns: verb_key, base_verb, meaning_en, example_short_1~3, example_long_1~3, situation_1~5
+                Columns: verb_key, base_verb, meaning_en, is_active, example_short_1~3, example_long_1~3, situation_1~5
               </p>
               <p className="text-xs text-muted-foreground">
                 Existing verb_key → updated. New verb_key → inserted &amp; assigned to all students.
@@ -496,34 +502,120 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
-          <h3 className="text-lg font-bold">📚 Verb List ({verbs.filter(v => v.is_active).length} active / {verbs.length} total)</h3>
-          <div className="space-y-2">
-            {verbs.map((v) => (
-              <Card key={v.id} className={`rounded-xl kid-shadow ${!v.is_active ? "opacity-50" : ""}`}>
-                <CardContent className="pt-3 pb-2 flex items-center justify-between">
-                  <div>
-                    <span className="font-bold capitalize">{v.base_verb}</span>
-                    <span className="text-sm text-muted-foreground ml-2">- {v.meaning_en}</span>
-                    {!v.is_active && <Badge variant="outline" className="ml-2 text-xs rounded-full">Inactive</Badge>}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-xl shrink-0"
-                    onClick={async () => {
-                      const newActive = !v.is_active;
-                      const { error } = await supabase.from("verbs").update({ is_active: newActive }).eq("id", v.id);
-                      if (error) { toast.error(error.message); return; }
-                      setVerbs(prev => prev.map(verb => verb.id === v.id ? { ...verb, is_active: newActive } : verb));
-                      toast.success(newActive ? "Verb restored ✅" : "Verb deactivated 🗑️");
-                    }}
-                  >
-                    <Trash2 className={`h-4 w-4 ${v.is_active ? "text-destructive" : "text-primary"}`} />
+          {/* Search & Filter */}
+          <Card className="rounded-2xl kid-shadow">
+            <CardContent className="pt-4 pb-3 space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+                <Input
+                  value={verbSearch}
+                  onChange={(e) => setVerbSearch(e.target.value)}
+                  placeholder="Search verbs..."
+                  className="h-11 rounded-xl text-base pl-10"
+                />
+              </div>
+              <select
+                value={verbFilterStatus}
+                onChange={(e) => setVerbFilterStatus(e.target.value as any)}
+                className="w-full h-11 rounded-xl border bg-background px-3 text-base"
+              >
+                <option value="all">All Verbs</option>
+                <option value="active">Active Only</option>
+                <option value="inactive">Inactive Only</option>
+              </select>
+            </CardContent>
+          </Card>
+
+          {/* Bulk Actions */}
+          {selectedVerbIds.size > 0 && (
+            <Card className="rounded-2xl kid-shadow border-primary/30">
+              <CardContent className="pt-3 pb-3 flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-sm font-bold">{selectedVerbIds.size} selected</span>
+                <div className="flex gap-2">
+                  <Button size="sm" className="rounded-xl text-xs" onClick={async () => {
+                    const ids = Array.from(selectedVerbIds);
+                    const { error } = await supabase.from("verbs").update({ is_active: true }).in("id", ids);
+                    if (error) { toast.error(error.message); return; }
+                    setVerbs(prev => prev.map(v => ids.includes(v.id) ? { ...v, is_active: true } : v));
+                    setSelectedVerbIds(new Set());
+                    toast.success("Activated ✅");
+                  }}>Activate Selected</Button>
+                  <Button size="sm" variant="outline" className="rounded-xl text-xs" onClick={async () => {
+                    const ids = Array.from(selectedVerbIds);
+                    const { error } = await supabase.from("verbs").update({ is_active: false }).in("id", ids);
+                    if (error) { toast.error(error.message); return; }
+                    setVerbs(prev => prev.map(v => ids.includes(v.id) ? { ...v, is_active: false } : v));
+                    setSelectedVerbIds(new Set());
+                    toast.success("Deactivated 🗑️");
+                  }}>Deactivate Selected</Button>
+                  <Button size="sm" variant="ghost" className="rounded-xl text-xs" onClick={() => setSelectedVerbIds(new Set())}>Clear</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {(() => {
+            const searchLower = verbSearch.toLowerCase();
+            const filtered = verbs.filter(v => {
+              if (verbFilterStatus === "active" && !v.is_active) return false;
+              if (verbFilterStatus === "inactive" && v.is_active) return false;
+              if (searchLower && !v.base_verb.toLowerCase().includes(searchLower) && !v.verb_key.toLowerCase().includes(searchLower) && !(v.meaning_en || "").toLowerCase().includes(searchLower)) return false;
+              return true;
+            });
+
+            return (
+              <>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold">📚 Verb List ({filtered.length})</h3>
+                  <Button size="sm" variant="ghost" className="text-xs rounded-xl" onClick={() => {
+                    if (selectedVerbIds.size === filtered.length) {
+                      setSelectedVerbIds(new Set());
+                    } else {
+                      setSelectedVerbIds(new Set(filtered.map(v => v.id)));
+                    }
+                  }}>
+                    {selectedVerbIds.size === filtered.length && filtered.length > 0 ? "Deselect All" : "Select All"}
                   </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                </div>
+                <div className="space-y-2">
+                  {filtered.map((v) => (
+                    <Card key={v.id} className={`rounded-xl kid-shadow ${!v.is_active ? "opacity-60" : ""}`}>
+                      <CardContent className="pt-3 pb-2 flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedVerbIds.has(v.id)}
+                          onChange={() => {
+                            setSelectedVerbIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(v.id)) next.delete(v.id); else next.add(v.id);
+                              return next;
+                            });
+                          }}
+                          className="h-5 w-5 rounded shrink-0 accent-primary"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="font-bold capitalize">{v.base_verb}</span>
+                          <span className="text-sm text-muted-foreground ml-2">- {v.meaning_en}</span>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const newActive = !v.is_active;
+                            const { error } = await supabase.from("verbs").update({ is_active: newActive }).eq("id", v.id);
+                            if (error) { toast.error(error.message); return; }
+                            setVerbs(prev => prev.map(verb => verb.id === v.id ? { ...verb, is_active: newActive } : verb));
+                            toast.success(newActive ? "Activated ✅" : "Deactivated 🗑️");
+                          }}
+                          className={`w-10 h-6 rounded-full transition-colors shrink-0 ${v.is_active ? "bg-primary" : "bg-muted"}`}
+                        >
+                          <div className={`w-4 h-4 bg-background rounded-full transition-transform mx-1 ${v.is_active ? "translate-x-4" : ""}`} />
+                        </button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
         </TabsContent>
 
         {/* Credits Tab */}
