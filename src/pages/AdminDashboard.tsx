@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock, Search } from "lucide-react";
+import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock, Search, CheckCircle2, XCircle } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import * as XLSX from "xlsx";
 
 type Student = {
@@ -502,29 +503,36 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
-          {/* Search & Filter */}
-          <Card className="rounded-2xl kid-shadow">
-            <CardContent className="pt-4 pb-3 space-y-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                <Input
-                  value={verbSearch}
-                  onChange={(e) => setVerbSearch(e.target.value)}
-                  placeholder="Search verbs..."
-                  className="h-11 rounded-xl text-base pl-10"
-                />
-              </div>
-              <select
-                value={verbFilterStatus}
-                onChange={(e) => setVerbFilterStatus(e.target.value as any)}
-                className="w-full h-11 rounded-xl border bg-background px-3 text-base"
-              >
-                <option value="all">All Verbs</option>
-                <option value="active">Active Only</option>
-                <option value="inactive">Inactive Only</option>
-              </select>
-            </CardContent>
-          </Card>
+          {/* Filter Tabs */}
+          <div className="flex gap-2">
+            {(["all", "active", "inactive"] as const).map((tab) => {
+              const count = tab === "all" ? verbs.length : verbs.filter(v => tab === "active" ? v.is_active : !v.is_active).length;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setVerbFilterStatus(tab)}
+                  className={`flex-1 py-2.5 px-3 rounded-xl text-sm font-bold transition-colors ${
+                    verbFilterStatus === tab
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  {tab === "all" ? "All" : tab === "active" ? "Active" : "Inactive"} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+            <Input
+              value={verbSearch}
+              onChange={(e) => setVerbSearch(e.target.value)}
+              placeholder="Search verbs..."
+              className="h-11 rounded-xl text-base pl-10"
+            />
+          </div>
 
           {/* Bulk Actions */}
           {selectedVerbIds.size > 0 && (
@@ -579,7 +587,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="space-y-2">
                   {filtered.map((v) => (
-                    <Card key={v.id} className={`rounded-xl kid-shadow ${!v.is_active ? "opacity-60" : ""}`}>
+                    <Card key={v.id} className={`rounded-xl kid-shadow transition-colors ${!v.is_active ? "bg-muted/50 border-muted" : ""}`}>
                       <CardContent className="pt-3 pb-2 flex items-center gap-3">
                         <input
                           type="checkbox"
@@ -594,21 +602,29 @@ export default function AdminDashboard() {
                           className="h-5 w-5 rounded shrink-0 accent-primary"
                         />
                         <div className="flex-1 min-w-0">
-                          <span className="font-bold capitalize">{v.base_verb}</span>
-                          <span className="text-sm text-muted-foreground ml-2">- {v.meaning_en}</span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`font-bold capitalize ${!v.is_active ? "text-muted-foreground" : ""}`}>{v.base_verb}</span>
+                            {v.is_active ? (
+                              <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px] px-1.5 py-0">
+                                <CheckCircle2 className="h-3 w-3 mr-0.5" /> Active
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="rounded-full text-muted-foreground border-muted-foreground/30 text-[10px] px-1.5 py-0">
+                                <XCircle className="h-3 w-3 mr-0.5" /> Inactive
+                              </Badge>
+                            )}
+                          </div>
+                          <span className={`text-sm ${!v.is_active ? "text-muted-foreground/60" : "text-muted-foreground"}`}>{v.meaning_en}</span>
                         </div>
-                        <button
-                          onClick={async () => {
-                            const newActive = !v.is_active;
-                            const { error } = await supabase.from("verbs").update({ is_active: newActive }).eq("id", v.id);
+                        <Switch
+                          checked={v.is_active}
+                          onCheckedChange={async (checked) => {
+                            const { error } = await supabase.from("verbs").update({ is_active: checked }).eq("id", v.id);
                             if (error) { toast.error(error.message); return; }
-                            setVerbs(prev => prev.map(verb => verb.id === v.id ? { ...verb, is_active: newActive } : verb));
-                            toast.success(newActive ? "Activated ✅" : "Deactivated 🗑️");
+                            setVerbs(prev => prev.map(verb => verb.id === v.id ? { ...verb, is_active: checked } : verb));
+                            toast.success(checked ? "Activated ✅" : "Deactivated 🗑️");
                           }}
-                          className={`w-10 h-6 rounded-full transition-colors shrink-0 ${v.is_active ? "bg-primary" : "bg-muted"}`}
-                        >
-                          <div className={`w-4 h-4 bg-background rounded-full transition-transform mx-1 ${v.is_active ? "translate-x-4" : ""}`} />
-                        </button>
+                        />
                       </CardContent>
                     </Card>
                   ))}
