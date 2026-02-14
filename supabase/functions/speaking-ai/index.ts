@@ -9,14 +9,28 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages, verb_data, action } = await req.json();
+    const { messages, verb_data, action, difficulty_level = "medium", speech_speed = "medium" } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     let systemPrompt = "";
 
+    const difficultyGuides: Record<string, string> = {
+      low: "Use only simple sentences. Avoid complex grammar. Use basic vocabulary.",
+      medium: "Use moderate grammar complexity with common expressions.",
+      high: "Use natural, varied grammar including idioms and complex sentences.",
+    };
+    const speedGuides: Record<string, string> = {
+      slow: "Keep responses SHORT (1-2 sentences). Use simple words.",
+      medium: "Keep responses moderate length (2-3 sentences).",
+      fast: "You can use longer responses and natural pacing.",
+    };
+    const diffGuide = difficultyGuides[difficulty_level] || difficultyGuides["medium"];
+    const spdGuide = speedGuides[speech_speed] || speedGuides["medium"];
+    const levelPreamble = `DIFFICULTY: ${difficulty_level.toUpperCase()} - ${diffGuide}\nSPEED: ${speech_speed.toUpperCase()} - ${spdGuide}\n\n`;
+
     if (action === "explain") {
-      systemPrompt = `You are a friendly English teacher for Korean students. 
+      systemPrompt = levelPreamble + `You are a friendly English teacher for Korean students. 
 You ONLY speak English. Keep your language simple and encouraging.
 
 The student is learning the verb: "${verb_data.verb}"
@@ -40,7 +54,7 @@ Keep it short, friendly, and encouraging. Use simple words. Add emoji occasional
       ].filter(Boolean);
       const randomSituation = situations[Math.floor(Math.random() * situations.length)] || "Tell me about your day";
 
-      systemPrompt = `You are a friendly English teacher for Korean students.
+      systemPrompt = levelPreamble + `You are a friendly English teacher for Korean students.
 You ONLY speak English. Keep your language simple and encouraging.
 
 The student is practicing the verb: "${verb_data.verb}"
@@ -50,7 +64,7 @@ Ask them to answer using the verb "${verb_data.verb}" in their response.
 Keep the prompt short and clear. Be encouraging!`;
 
     } else if (action === "feedback") {
-      systemPrompt = `You are a friendly English teacher for Korean students.
+      systemPrompt = levelPreamble + `You are a friendly English teacher for Korean students.
 You ONLY speak English. Keep your language simple.
 
 The student is practicing the verb: "${verb_data.verb}"
@@ -63,7 +77,7 @@ They just answered. Your job:
 
 Keep feedback SHORT and CLEAR.`;
     } else {
-      systemPrompt = `You are a friendly English teacher. You ONLY speak English. Be encouraging and helpful.`;
+      systemPrompt = levelPreamble + `You are a friendly English teacher. You ONLY speak English. Be encouraging and helpful.`;
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

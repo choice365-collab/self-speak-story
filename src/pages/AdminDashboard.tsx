@@ -15,13 +15,14 @@ type Student = {
   student_id: string | null;
   display_name: string | null;
   daily_quota_minutes: number;
+  difficulty_level: string;
+  speech_speed: string;
 };
 
 type Verb = {
   id: string;
   verb_key: string;
   base_verb: string;
-  level: string | null;
   meaning_en: string | null;
 };
 
@@ -77,8 +78,8 @@ export default function AdminDashboard() {
     const today = new Date().toISOString().split("T")[0];
 
     const [studentsRes, verbsRes, assignmentsRes, creditRes, usageRes] = await Promise.all([
-      supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes").eq("role", "student"),
-      supabase.from("verbs").select("id, verb_key, base_verb, level, meaning_en").order("base_verb"),
+      supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed").eq("role", "student"),
+      supabase.from("verbs").select("id, verb_key, base_verb, meaning_en").order("base_verb"),
       supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
       supabase.from("credit_balance").select("balance_usd").limit(1).maybeSingle(),
       supabase.from("daily_usage").select("student_id, used_seconds").eq("date", today),
@@ -164,7 +165,6 @@ export default function AdminDashboard() {
       const verbData = rows.map((row: any) => ({
         verb_key: row.verb_key || "",
         base_verb: row.base_verb || "",
-        level: row.level || null,
         meaning_en: row.meaning_en || null,
         example_short_1: row.example_short_1 || null,
         example_short_2: row.example_short_2 || null,
@@ -352,6 +352,9 @@ export default function AdminDashboard() {
                     <div>
                       <div className="font-bold text-lg">{s.display_name}</div>
                       <div className="text-sm text-muted-foreground">ID: {s.student_id} | {s.daily_quota_minutes} min/day</div>
+                      <div className="text-xs text-muted-foreground">
+                        Difficulty: {s.difficulty_level} | Speed: {s.speech_speed}
+                      </div>
                     </div>
                     <Badge variant="outline" className="rounded-full">
                       {completed}/{studentAssignments.length} done
@@ -441,7 +444,7 @@ export default function AdminDashboard() {
             <CardHeader><CardTitle className="text-lg">📤 Upload Verbs (Excel)</CardTitle></CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground mb-3">
-                Upload an Excel file with columns: verb_key, base_verb, level, meaning_en, example_short_1~3, example_long_1~3, situation_1~5
+                Upload an Excel file with columns: verb_key, base_verb, meaning_en, example_short_1~3, example_long_1~3, situation_1~5
               </p>
               <label className="block">
                 <div className="flex items-center justify-center w-full h-16 rounded-xl border-2 border-dashed border-primary/30 hover:border-primary cursor-pointer transition-colors">
@@ -462,7 +465,7 @@ export default function AdminDashboard() {
                     <span className="font-bold capitalize">{v.base_verb}</span>
                     <span className="text-sm text-muted-foreground ml-2">- {v.meaning_en}</span>
                   </div>
-                  {v.level && <Badge variant="outline" className="rounded-full text-xs">{v.level}</Badge>}
+                  
                 </CardContent>
               </Card>
             ))}
