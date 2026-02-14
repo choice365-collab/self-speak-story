@@ -185,24 +185,31 @@ export default function AdminDashboard() {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<any>(ws);
 
-      const verbRows = rows.map((row: any) => ({
-        verb_key: row.verb_key || "",
-        base_verb: row.base_verb || "",
-        meaning_en: row.meaning_en || null,
-        is_active: row.is_active === false || row.is_active === "false" || row.is_active === 0 ? false : true,
-        example_short_1: row.example_short_1 || null,
-        example_short_2: row.example_short_2 || null,
-        example_short_3: row.example_short_3 || null,
-        example_long_1: row.example_long_1 || null,
-        example_long_2: row.example_long_2 || null,
-        example_long_3: row.example_long_3 || null,
-        situation_1: row.situation_1 || null,
-        situation_2: row.situation_2 || null,
-        situation_3: row.situation_3 || null,
-        situation_4: row.situation_4 || null,
-        situation_5: row.situation_5 || null,
-        created_by: user?.id,
-      })).filter((v: any) => v.verb_key && v.base_verb);
+      const hasIsActiveColumn = rows.length > 0 && "is_active" in rows[0];
+
+      const verbRows = rows.map((row: any) => {
+        const base: any = {
+          verb_key: row.verb_key || "",
+          base_verb: row.base_verb || "",
+          meaning_en: row.meaning_en || null,
+          example_short_1: row.example_short_1 || null,
+          example_short_2: row.example_short_2 || null,
+          example_short_3: row.example_short_3 || null,
+          example_long_1: row.example_long_1 || null,
+          example_long_2: row.example_long_2 || null,
+          example_long_3: row.example_long_3 || null,
+          situation_1: row.situation_1 || null,
+          situation_2: row.situation_2 || null,
+          situation_3: row.situation_3 || null,
+          situation_4: row.situation_4 || null,
+          situation_5: row.situation_5 || null,
+          created_by: user?.id,
+        };
+        if (hasIsActiveColumn) {
+          base.is_active = row.is_active === false || row.is_active === "false" || row.is_active === 0 ? false : true;
+        }
+        return base;
+      }).filter((v: any) => v.verb_key && v.base_verb);
 
       if (verbRows.length === 0) {
         toast.error("No valid verbs found in file");
@@ -218,16 +225,21 @@ export default function AdminDashboard() {
       const toUpdate = verbRows.filter(v => existingMap.has(v.verb_key));
       const toInsert = verbRows.filter(v => !existingMap.has(v.verb_key));
 
-      // Update existing verbs
+      // Update existing verbs — exclude created_by and verb_key, and exclude is_active if column absent
       for (const v of toUpdate) {
-      const { created_by, verb_key, ...updateData } = v;
+        const { created_by: _cb, verb_key: _vk, ...updateData } = v;
         await supabase.from("verbs").update(updateData).eq("verb_key", v.verb_key);
       }
 
-      // Insert new verbs
+      // Insert new verbs — default is_active to true if column absent
+      const insertRows = toInsert.map(v => {
+        const { created_by, ...rest } = v;
+        return { ...rest, created_by, is_active: v.is_active ?? true };
+      });
+
       let newVerbIds: string[] = [];
-      if (toInsert.length > 0) {
-        const { data: insertedVerbs, error } = await supabase.from("verbs").insert(toInsert).select("id");
+      if (insertRows.length > 0) {
+        const { data: insertedVerbs, error } = await supabase.from("verbs").insert(insertRows).select("id");
         if (error) throw error;
         newVerbIds = (insertedVerbs || []).map((v: any) => v.id);
       }
