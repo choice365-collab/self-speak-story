@@ -39,7 +39,7 @@ serve(async (req) => {
       });
     }
 
-    const { role, login_id, pin, password, display_name, daily_quota_minutes } = await req.json();
+    const { role, login_id, pin, password, display_name, daily_quota_minutes, difficulty_level, speech_speed } = await req.json();
 
     if (role === "student") {
       const email = `student_${login_id}@speakbyyourself.app`;
@@ -66,6 +66,8 @@ serve(async (req) => {
         student_id: login_id,
         display_name: display_name || login_id,
         daily_quota_minutes: daily_quota_minutes || 10,
+        difficulty_level: difficulty_level || "medium",
+        speech_speed: speech_speed || "medium",
       });
 
       // Create user_role

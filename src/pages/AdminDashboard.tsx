@@ -61,6 +61,8 @@ export default function AdminDashboard() {
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentPin, setNewStudentPin] = useState("");
   const [newStudentQuota, setNewStudentQuota] = useState("10");
+  const [newStudentDifficulty, setNewStudentDifficulty] = useState<"low" | "medium" | "high">("medium");
+  const [newStudentSpeed, setNewStudentSpeed] = useState<"slow" | "medium" | "fast">("medium");
   const [creatingStudent, setCreatingStudent] = useState(false);
 
   // Credit adjustment
@@ -139,18 +141,20 @@ export default function AdminDashboard() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         },
-        body: JSON.stringify({
-          role: "student",
-          login_id: newStudentId,
-          pin: newStudentPin,
-          display_name: newStudentName || newStudentId,
-          daily_quota_minutes: parseInt(newStudentQuota) || 10,
-        }),
+         body: JSON.stringify({
+            role: "student",
+            login_id: newStudentId,
+            pin: newStudentPin,
+            display_name: newStudentName || newStudentId,
+            daily_quota_minutes: parseInt(newStudentQuota) || 10,
+            difficulty_level: newStudentDifficulty,
+            speech_speed: newStudentSpeed,
+          }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       toast.success("Student created! 🎉");
-      setNewStudentId(""); setNewStudentName(""); setNewStudentPin(""); setNewStudentQuota("10");
+      setNewStudentId(""); setNewStudentName(""); setNewStudentPin(""); setNewStudentQuota("10"); setNewStudentDifficulty("medium"); setNewStudentSpeed("medium");
       loadData();
     } catch (e: any) {
       toast.error(e.message);
@@ -492,6 +496,30 @@ export default function AdminDashboard() {
                   <Input type="number" value={newStudentQuota} onChange={(e) => setNewStudentQuota(e.target.value)}
                     placeholder="10" className="h-12 rounded-xl text-base pr-20" />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">min/day</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold">Difficulty</Label>
+                  <div className="flex rounded-xl border overflow-hidden">
+                    {([["L", "low"], ["M", "medium"], ["H", "high"]] as const).map(([label, value]) => (
+                      <button key={value} type="button"
+                        onClick={() => setNewStudentDifficulty(value)}
+                        className={`flex-1 h-10 text-sm font-bold transition-colors ${newStudentDifficulty === value ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                      >{label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold">Speed</Label>
+                  <div className="flex rounded-xl border overflow-hidden">
+                    {([["L", "slow"], ["M", "medium"], ["H", "fast"]] as const).map(([label, value]) => (
+                      <button key={value} type="button"
+                        onClick={() => setNewStudentSpeed(value)}
+                        className={`flex-1 h-10 text-sm font-bold transition-colors ${newStudentSpeed === value ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                      >{label}</button>
+                    ))}
+                  </div>
                 </div>
               </div>
               <Button onClick={createStudent} disabled={creatingStudent} className="w-full h-12 rounded-xl font-bold text-base">
