@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useNavigate } from "react-router-dom";
@@ -12,6 +13,8 @@ type Assignment = {
   id: string;
   status: string;
   verb_id: string;
+  task_no: number;
+  is_enabled: boolean;
   verbs: { verb_key: string; base_verb: string; meaning_en: string | null; level: string | null } | null;
 };
 
@@ -22,6 +25,7 @@ export default function StudentDashboard() {
   const [dailyUsedSeconds, setDailyUsedSeconds] = useState(0);
   const [dailyLimitSeconds, setDailyLimitSeconds] = useState(600);
   const [loading, setLoading] = useState(true);
+  const [goToTask, setGoToTask] = useState("");
 
   const remainingSeconds = Math.max(0, dailyLimitSeconds - dailyUsedSeconds);
   const remainingMinutes = Math.floor(remainingSeconds / 60);
@@ -40,9 +44,10 @@ export default function StudentDashboard() {
     const [assignRes, usageRes] = await Promise.all([
       supabase
         .from("assignments")
-        .select("id, status, verb_id, verbs(verb_key, base_verb, meaning_en, level)")
+        .select("id, status, verb_id, task_no, is_enabled, verbs(verb_key, base_verb, meaning_en, level)")
         .eq("student_id", user.id)
-        .order("assigned_at", { ascending: false }),
+        .eq("is_enabled", true)
+        .order("task_no", { ascending: true }),
       supabase
         .from("daily_usage")
         .select("used_seconds, limit_seconds")
@@ -117,7 +122,27 @@ export default function StudentDashboard() {
       </Button>
 
       {/* Assignments */}
-      <h2 className="text-xl font-black mb-4">📚 My Tasks</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-black">📚 My Tasks</h2>
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            placeholder="Go to #"
+            value={goToTask}
+            onChange={(e) => setGoToTask(e.target.value)}
+            className="w-20 h-10 rounded-xl text-base text-center"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-xl h-10"
+            onClick={() => {
+              const el = document.getElementById(`task-${goToTask}`);
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+          >Go</Button>
+        </div>
+      </div>
 
       {assignments.length === 0 ? (
         <Card className="rounded-2xl kid-shadow">
@@ -132,12 +157,15 @@ export default function StudentDashboard() {
             const config = statusConfig[a.status as keyof typeof statusConfig] || statusConfig.not_started;
             const StatusIcon = config.icon;
             return (
-              <Card key={a.id} className="rounded-2xl kid-shadow hover:scale-[1.01] transition-transform">
+              <Card key={a.id} id={`task-${a.task_no}`} className="rounded-2xl kid-shadow hover:scale-[1.01] transition-transform">
                 <CardContent className="pt-5 pb-4">
                   <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <h3 className="text-xl font-bold capitalize">{a.verbs?.base_verb || "Unknown"}</h3>
-                      <p className="text-sm text-muted-foreground">{a.verbs?.meaning_en}</p>
+                    <div className="flex items-center gap-3">
+                      <div className="text-lg font-black text-primary">#{a.task_no}</div>
+                      <div>
+                        <h3 className="text-xl font-bold capitalize">{a.verbs?.base_verb || "Unknown"}</h3>
+                        <p className="text-sm text-muted-foreground">{a.verbs?.meaning_en}</p>
+                      </div>
                     </div>
                     <Badge variant={config.variant} className="text-sm px-3 py-1 rounded-full">
                       <StatusIcon className="h-3.5 w-3.5 mr-1" />

@@ -28,8 +28,11 @@ type Verb = {
 type AssignmentView = {
   id: string;
   status: string;
+  task_no: number;
+  is_enabled: boolean;
   student_id: string;
   verb_id: string;
+  completed_at: string | null;
   profiles: { student_id: string | null; display_name: string | null } | null;
   verbs: { base_verb: string; meaning_en: string | null } | null;
 };
@@ -60,6 +63,11 @@ export default function AdminDashboard() {
   const [creditNote, setCreditNote] = useState("");
   const [creditType, setCreditType] = useState("topup");
 
+  // Task filter
+  const [selectedStudentId, setSelectedStudentId] = useState<string>("");
+  const [taskRangeFrom, setTaskRangeFrom] = useState("");
+  const [taskRangeTo, setTaskRangeTo] = useState("");
+
   useEffect(() => {
     loadData();
   }, []);
@@ -71,7 +79,7 @@ export default function AdminDashboard() {
     const [studentsRes, verbsRes, assignmentsRes, creditRes, usageRes] = await Promise.all([
       supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes").eq("role", "student"),
       supabase.from("verbs").select("id, verb_key, base_verb, level, meaning_en").order("base_verb"),
-      supabase.from("assignments").select("id, status, student_id, verb_id, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)"),
+      supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
       supabase.from("credit_balance").select("balance_usd").limit(1).maybeSingle(),
       supabase.from("daily_usage").select("student_id, used_seconds").eq("date", today),
     ]);
@@ -85,6 +93,28 @@ export default function AdminDashboard() {
   };
 
   const totalUsedSecondsToday = todayUsage.reduce((sum, u) => sum + u.used_seconds, 0);
+
+  const toggleAssignmentEnabled = async (assignmentId: string, currentEnabled: boolean) => {
+    const { error } = await supabase
+      .from("assignments")
+      .update({ is_enabled: !currentEnabled })
+      .eq("id", assignmentId);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setAssignments(prev => prev.map(a => a.id === assignmentId ? { ...a, is_enabled: !currentEnabled } : a));
+  };
+
+  // Filtered assignments for Tasks tab
+  const filteredAssignments = assignments.filter(a => {
+    if (selectedStudentId && a.student_id !== selectedStudentId) return false;
+    const from = parseInt(taskRangeFrom);
+    const to = parseInt(taskRangeTo);
+    if (!isNaN(from) && a.task_no < from) return false;
+    if (!isNaN(to) && a.task_no > to) return false;
+    return true;
+  });
 
   const createStudent = async () => {
     if (!newStudentId || !newStudentPin || newStudentPin.length !== 4) {
@@ -158,19 +188,30 @@ export default function AdminDashboard() {
       const { data: insertedVerbs, error } = await supabase.from("verbs").insert(verbData).select("id");
       if (error) throw error;
 
-      // Auto-assign new verbs to ALL existing students
+      // Auto-assign new verbs to ALL existing students with stable task_no
       if (insertedVerbs && insertedVerbs.length > 0 && students.length > 0) {
-        // Get existing assignments to prevent duplicates
         const newVerbIds = insertedVerbs.map((v: any) => v.id);
-        const assignmentRows = students.flatMap((s) =>
-          newVerbIds.map((verbId: string) => ({
+        
+        for (const s of students) {
+          // Get current max task_no for this student
+          const { data: maxRow } = await supabase
+            .from("assignments")
+            .select("task_no")
+            .eq("student_id", s.id)
+            .order("task_no", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          const startNo = (maxRow?.task_no || 0) + 1;
+          const assignmentRows = newVerbIds.map((verbId: string, idx: number) => ({
             student_id: s.id,
             verb_id: verbId,
             assigned_by: user?.id,
-          }))
-        );
-        const { error: assignError } = await supabase.from("assignments").insert(assignmentRows);
-        if (assignError) console.error("Auto-assign error:", assignError);
+            task_no: startNo + idx,
+          }));
+          const { error: assignError } = await supabase.from("assignments").insert(assignmentRows);
+          if (assignError) console.error("Auto-assign error for student", s.id, assignError);
+        }
       }
 
       toast.success(`${verbData.length} verbs uploaded & assigned to all students! 📚`);
@@ -337,17 +378,58 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
+          {/* Filters */}
+          <Card className="rounded-2xl kid-shadow">
+            <CardContent className="pt-4 pb-3 space-y-3">
+              <select
+                value={selectedStudentId}
+                onChange={(e) => setSelectedStudentId(e.target.value)}
+                className="w-full h-12 rounded-xl border bg-background px-3 text-base"
+              >
+                <option value="">All Students</option>
+                {students.map(s => (
+                  <option key={s.id} value={s.id}>{s.display_name || s.student_id}</option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <Input
+                  type="number" placeholder="From #" value={taskRangeFrom}
+                  onChange={(e) => setTaskRangeFrom(e.target.value)}
+                  className="h-10 rounded-xl text-base"
+                />
+                <Input
+                  type="number" placeholder="To #" value={taskRangeTo}
+                  onChange={(e) => setTaskRangeTo(e.target.value)}
+                  className="h-10 rounded-xl text-base"
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-          <h3 className="text-lg font-bold">📊 All Assignments</h3>
-          {assignments.map((a) => (
-            <Card key={a.id} className="rounded-2xl kid-shadow">
-              <CardContent className="pt-4 pb-3 flex items-center justify-between">
-                <div>
-                  <div className="font-bold">{a.profiles?.display_name || a.profiles?.student_id}</div>
-                  <div className="text-sm text-muted-foreground">{a.verbs?.base_verb} - {a.verbs?.meaning_en}</div>
+          <h3 className="text-lg font-bold">📊 Tasks ({filteredAssignments.length})</h3>
+          {filteredAssignments.map((a) => (
+            <Card key={a.id} className={`rounded-2xl kid-shadow ${!a.is_enabled ? "opacity-50" : ""}`}>
+              <CardContent className="pt-4 pb-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="text-lg font-black text-primary shrink-0">#{a.task_no}</div>
+                  <div className="min-w-0">
+                    <div className="font-bold truncate">{a.profiles?.display_name || a.profiles?.student_id}</div>
+                    <div className="text-sm text-muted-foreground truncate">{a.verbs?.base_verb} - {a.verbs?.meaning_en}</div>
+                    {a.completed_at && (
+                      <div className="text-xs text-muted-foreground">Done: {new Date(a.completed_at).toLocaleDateString()}</div>
+                    )}
+                  </div>
                 </div>
-                <Badge variant={a.status === "completed" ? "secondary" : a.status === "in_progress" ? "default" : "outline"}
-                  className="rounded-full capitalize">{a.status.replace("_", " ")}</Badge>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge variant={a.status === "completed" ? "secondary" : a.status === "in_progress" ? "default" : "outline"}
+                    className="rounded-full capitalize text-xs">{a.status.replace("_", " ")}</Badge>
+                  <button
+                    onClick={() => toggleAssignmentEnabled(a.id, a.is_enabled)}
+                    className={`w-10 h-6 rounded-full transition-colors ${a.is_enabled ? "bg-primary" : "bg-muted"}`}
+                  >
+                    <div className={`w-4 h-4 bg-background rounded-full transition-transform mx-1 ${a.is_enabled ? "translate-x-4" : ""}`} />
+                  </button>
+                </div>
               </CardContent>
             </Card>
           ))}

@@ -74,13 +74,18 @@ serve(async (req) => {
         role: "student",
       });
 
-      // Auto-assign all existing verbs to this new student
-      const { data: allVerbs } = await supabase.from("verbs").select("id");
+      // Auto-assign all existing verbs to this new student with stable task_no
+      const { data: allVerbs } = await supabase
+        .from("verbs")
+        .select("id")
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true });
       if (allVerbs && allVerbs.length > 0) {
-        const assignmentRows = allVerbs.map((v: any) => ({
+        const assignmentRows = allVerbs.map((v: any, idx: number) => ({
           student_id: newUser.user.id,
           verb_id: v.id,
           assigned_by: caller.id,
+          task_no: idx + 1,
         }));
         await supabase.from("assignments").insert(assignmentRows);
       }
