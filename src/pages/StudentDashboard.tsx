@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Clock, BookOpen, CheckCircle, Play } from "lucide-react";
+import { LogOut, Clock, BookOpen, CheckCircle, Play, Mic } from "lucide-react";
 
 type Assignment = {
   id: string;
@@ -107,6 +107,14 @@ export default function StudentDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Voice Chat button */}
+      <Button
+        onClick={() => navigate("/voice-chat")}
+        className="w-full mb-6 h-16 text-lg font-bold rounded-2xl kid-shadow gap-2 bg-secondary hover:bg-secondary/90"
+      >
+        <Mic className="h-6 w-6" /> Free Voice Chat 🎙️
+      </Button>
 
       {/* Assignments */}
       <h2 className="text-xl font-black mb-4">📚 My Tasks</h2>
