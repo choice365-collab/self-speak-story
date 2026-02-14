@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.bootstrap-admin]
 verify_jwt = false
+
+[functions.realtime-token]
+verify_jwt = false
