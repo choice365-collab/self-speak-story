@@ -8,6 +8,7 @@ import LoginPage from "@/pages/LoginPage";
 import StudentDashboard from "@/pages/StudentDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
 import SpeakingPractice from "@/pages/SpeakingPractice";
+import VoiceChat from "@/pages/VoiceChat";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -48,6 +49,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<StudentDashboard />} />
       <Route path="/practice/:assignmentId" element={<SpeakingPractice />} />
+      <Route path="/voice-chat" element={<VoiceChat />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
