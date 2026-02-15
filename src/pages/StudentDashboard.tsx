@@ -202,7 +202,7 @@ export default function StudentDashboard() {
                     <div className="flex items-center gap-3">
                       <div className="text-lg font-black text-primary">#{a.verbs?.display_no ?? a.task_no}</div>
                       <div>
-                        <h3 className="text-xl font-bold">{a.verbs?.verb_key ? formatVerbKey(a.verbs.verb_key) : (a.verbs?.base_verb || "Unknown")}</h3>
+                        <h3 className="text-xl font-bold">{a.verbs?.verb_key ? formatVerbKey(a.verbs.verb_key, a.verbs.meaning_en) : (a.verbs?.base_verb || "Unknown")}</h3>
                         {a.completed_count > 0 && (
                           <p className="text-xs font-semibold text-secondary">
                             Completed x{a.completed_count}
