@@ -38,11 +38,18 @@ export function useRealtimeWebRTC() {
     setError(null);
     setTranscripts([]);
     setPartialTranscript("");
-    addDebug("Requesting ephemeral token…");
+    addDebug("Requesting microphone…");
 
     try {
-      // 1. Mic permission first
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // 1. Mic permission — only via user gesture
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        localStorage.setItem("micPermissionGranted", "true");
+      } catch (micErr: any) {
+        localStorage.removeItem("micPermissionGranted");
+        throw new Error("Please enable microphone access in your browser settings.");
+      }
       streamRef.current = stream;
       addDebug("Microphone granted");
 
