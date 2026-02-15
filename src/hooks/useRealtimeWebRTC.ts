@@ -1,6 +1,7 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 type ConnectionState = "disconnected" | "connecting" | "connected" | "error";
+export type MicStatus = "checking" | "ready" | "needs_permission" | "denied";
 
 export type TranscriptEntry = {
   role: "user" | "ai";
@@ -22,6 +23,34 @@ export function useRealtimeWebRTC() {
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [partialTranscript, setPartialTranscript] = useState<string>("");
   const [debugLog, setDebugLog] = useState<DebugEntry[]>([]);
+  const [micStatus, setMicStatus] = useState<MicStatus>("checking");
+
+  // Check mic permission on mount without triggering a prompt
+  useEffect(() => {
+    async function checkMic() {
+      try {
+        const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
+        if (result.state === "granted") {
+          setMicStatus("ready");
+          localStorage.setItem("micPermissionGranted", "true");
+        } else if (result.state === "denied") {
+          setMicStatus("denied");
+          localStorage.removeItem("micPermissionGranted");
+        } else {
+          setMicStatus(localStorage.getItem("micPermissionGranted") === "true" ? "ready" : "needs_permission");
+        }
+        result.addEventListener("change", () => {
+          if (result.state === "granted") { setMicStatus("ready"); localStorage.setItem("micPermissionGranted", "true"); }
+          else if (result.state === "denied") { setMicStatus("denied"); localStorage.removeItem("micPermissionGranted"); }
+          else { setMicStatus("needs_permission"); }
+        });
+      } catch {
+        // Fallback if permissions API not supported
+        setMicStatus(localStorage.getItem("micPermissionGranted") === "true" ? "ready" : "needs_permission");
+      }
+    }
+    checkMic();
+  }, []);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
@@ -251,6 +280,7 @@ export function useRealtimeWebRTC() {
     state,
     error,
     isMuted,
+    micStatus,
     transcripts,
     partialTranscript,
     debugLog,
