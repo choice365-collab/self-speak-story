@@ -30,6 +30,7 @@ type Verb = {
   base_verb: string;
   meaning_en: string | null;
   anchor_short_1: string | null;
+  anchor_long_1: string | null;
   is_active: boolean;
   verb_no: number;
   display_no: number | null;
@@ -194,7 +195,7 @@ export default function AdminDashboard() {
 
     const [studentsRes, verbsRes, assignmentsRes, creditRes, usageRes] = await Promise.all([
       supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed, korean_hint_mode").eq("role", "student"),
-      supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, anchor_short_1, is_active, verb_no, display_no").order("verb_no", { ascending: true }),
+      supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, anchor_short_1, anchor_long_1, is_active, verb_no, display_no").order("verb_no", { ascending: true }),
       supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, completed_count, last_completed_score, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
       supabase.from("credit_balance").select("balance_usd").limit(1).maybeSingle(),
       supabase.from("daily_usage").select("student_id, used_seconds").eq("date", today),
@@ -1044,7 +1045,7 @@ export default function AdminDashboard() {
                               </Badge>
                             )}
                           </div>
-                          <span className={`text-sm ${!v.is_active ? "text-muted-foreground/60" : "text-muted-foreground"}`}>{v.meaning_en}</span>
+                          <span className={`text-sm ${!v.is_active ? "text-muted-foreground/60" : "text-muted-foreground"}`}>{v.anchor_long_1 || v.meaning_en}</span>
                           {v.anchor_short_1 && (
                             <span className={`text-xs ${!v.is_active ? "text-muted-foreground/40" : "text-muted-foreground/70"}`}>{v.anchor_short_1}</span>
                           )}
