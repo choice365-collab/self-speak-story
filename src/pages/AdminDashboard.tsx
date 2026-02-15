@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatVerbKey } from "@/lib/formatVerbKey";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -1032,7 +1033,7 @@ export default function AdminDashboard() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <Badge variant="outline" className="rounded-full text-xs font-black px-1.5 py-0 shrink-0">#{v.display_no ?? v.verb_no}</Badge>
-                            <span className={`font-bold ${!v.is_active ? "text-muted-foreground" : ""}`}>{v.verb_key}</span>
+                            <span className={`font-bold ${!v.is_active ? "text-muted-foreground" : ""}`}>{formatVerbKey(v.verb_key, v.meaning_en)}</span>
                             {v.is_active ? (
                               <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px] px-1.5 py-0">
                                 <CheckCircle2 className="h-3 w-3 mr-0.5" /> Active
