@@ -101,20 +101,39 @@ export default function AdminDashboard() {
   const [hardDeleteVerbId, setHardDeleteVerbId] = useState<string | null>(null);
   const [hardDeleteConfirmText, setHardDeleteConfirmText] = useState("");
   const [hardDeleting, setHardDeleting] = useState(false);
+  const [bulkHardDeleteOpen, setBulkHardDeleteOpen] = useState(false);
+  const [bulkHardDeleteConfirm, setBulkHardDeleteConfirm] = useState("");
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [deleteAllConfirm, setDeleteAllConfirm] = useState("");
+
+  const cascadeDeleteVerbs = async (verbIds: string[]): Promise<{ verbs: number; assignments: number; logs: number; sessions: number }> => {
+    let totalAssignments = 0, totalLogs = 0, totalSessions = 0;
+    // Batch in chunks to avoid query limits
+    for (let i = 0; i < verbIds.length; i += 50) {
+      const chunk = verbIds.slice(i, i + 50);
+      const { data: relatedAssignments } = await supabase
+        .from("assignments").select("id").in("verb_id", chunk);
+      const assignmentIds = (relatedAssignments || []).map(a => a.id);
+      totalAssignments += assignmentIds.length;
+      if (assignmentIds.length > 0) {
+        for (let j = 0; j < assignmentIds.length; j += 50) {
+          const aChunk = assignmentIds.slice(j, j + 50);
+          const { data: logDel } = await supabase.from("practice_logs").delete().in("assignment_id", aChunk).select("id");
+          const { data: sessDel } = await supabase.from("speaking_sessions").delete().in("assignment_id", aChunk).select("id");
+          totalLogs += (logDel || []).length;
+          totalSessions += (sessDel || []).length;
+        }
+      }
+      await supabase.from("assignments").delete().in("verb_id", chunk);
+      await supabase.from("verbs").delete().in("id", chunk);
+    }
+    return { verbs: verbIds.length, assignments: totalAssignments, logs: totalLogs, sessions: totalSessions };
+  };
 
   const hardDeleteVerb = async (verbId: string) => {
     setHardDeleting(true);
     try {
-      const { data: relatedAssignments } = await supabase
-        .from("assignments").select("id").eq("verb_id", verbId);
-      const assignmentIds = (relatedAssignments || []).map(a => a.id);
-      if (assignmentIds.length > 0) {
-        await supabase.from("practice_logs").delete().in("assignment_id", assignmentIds);
-        await supabase.from("speaking_sessions").delete().in("assignment_id", assignmentIds);
-        await supabase.from("assignments").delete().eq("verb_id", verbId);
-      }
-      const { error } = await supabase.from("verbs").delete().eq("id", verbId);
-      if (error) throw error;
+      await cascadeDeleteVerbs([verbId]);
       setVerbs(prev => prev.filter(v => v.id !== verbId));
       setAssignments(prev => prev.filter(a => a.verb_id !== verbId));
       setHardDeleteVerbId(null);
@@ -122,6 +141,42 @@ export default function AdminDashboard() {
       toast.success("Verb permanently deleted 🗑️");
     } catch (err: any) {
       toast.error(err.message || "Delete failed");
+    } finally {
+      setHardDeleting(false);
+    }
+  };
+
+  const bulkHardDelete = async () => {
+    setHardDeleting(true);
+    try {
+      const ids = Array.from(selectedVerbIds);
+      const result = await cascadeDeleteVerbs(ids);
+      setVerbs(prev => prev.filter(v => !selectedVerbIds.has(v.id)));
+      setAssignments(prev => prev.filter(a => !ids.includes(a.verb_id)));
+      setSelectedVerbIds(new Set());
+      setBulkHardDeleteOpen(false);
+      setBulkHardDeleteConfirm("");
+      toast.success(`Deleted: ${result.verbs} verbs, ${result.assignments} assignments, ${result.logs} logs, ${result.sessions} sessions 🗑️`);
+    } catch (err: any) {
+      toast.error(err.message || "Bulk delete failed");
+    } finally {
+      setHardDeleting(false);
+    }
+  };
+
+  const deleteAllVerbs = async () => {
+    setHardDeleting(true);
+    try {
+      const allIds = verbs.map(v => v.id);
+      const result = await cascadeDeleteVerbs(allIds);
+      setVerbs([]);
+      setAssignments([]);
+      setSelectedVerbIds(new Set());
+      setDeleteAllOpen(false);
+      setDeleteAllConfirm("");
+      toast.success(`Deleted ALL: ${result.verbs} verbs, ${result.assignments} assignments, ${result.logs} logs, ${result.sessions} sessions 🗑️`);
+    } catch (err: any) {
+      toast.error(err.message || "Delete all failed");
     } finally {
       setHardDeleting(false);
     }
@@ -880,7 +935,14 @@ export default function AdminDashboard() {
             <Switch checked={devMode} onCheckedChange={setDevMode} />
           </div>
 
-          {/* Search */}
+          {devMode && (
+            <Button size="sm" variant="destructive" className="rounded-xl text-xs" onClick={() => {
+              setDeleteAllOpen(true);
+              setDeleteAllConfirm("");
+            }}>
+              <Trash2 className="h-3 w-3 mr-1" /> Delete ALL Verbs
+            </Button>
+          )}
           <div className="relative">
             <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
             <Input
@@ -905,7 +967,7 @@ export default function AdminDashboard() {
                     setSelectedVerbIds(new Set());
                     toast.success("Activated ✅");
                   }}>Activate Selected</Button>
-                  <Button size="sm" variant="outline" className="rounded-xl text-xs" onClick={async () => {
+                   <Button size="sm" variant="outline" className="rounded-xl text-xs" onClick={async () => {
                     const ids = Array.from(selectedVerbIds);
                     const { error } = await supabase.from("verbs").update({ is_active: false }).in("id", ids);
                     if (error) { toast.error(error.message); return; }
@@ -913,6 +975,14 @@ export default function AdminDashboard() {
                     setSelectedVerbIds(new Set());
                     toast.success("Deactivated 🗑️");
                   }}>Deactivate Selected</Button>
+                  {devMode && (
+                    <Button size="sm" variant="destructive" className="rounded-xl text-xs" onClick={() => {
+                      setBulkHardDeleteOpen(true);
+                      setBulkHardDeleteConfirm("");
+                    }}>
+                      <Trash2 className="h-3 w-3 mr-1" /> Hard Delete Selected
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" className="rounded-xl text-xs" onClick={() => setSelectedVerbIds(new Set())}>Clear</Button>
                 </div>
               </CardContent>
@@ -1065,6 +1135,78 @@ export default function AdminDashboard() {
               onClick={() => hardDeleteVerbId && hardDeleteVerb(hardDeleteVerbId)}
             >
               {hardDeleting ? "Deleting..." : "Permanently Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Hard Delete Confirmation Dialog */}
+      <Dialog open={bulkHardDeleteOpen} onOpenChange={(open) => { if (!open) { setBulkHardDeleteOpen(false); setBulkHardDeleteConfirm(""); } }}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" /> Permanently Delete {selectedVerbIds.size} Verbs
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete <strong>{selectedVerbIds.size} selected verbs</strong> and <strong>all related student data</strong> including assignments, practice logs, and session history. This action is <strong>irreversible</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm font-semibold">Type <span className="font-black text-destructive">DELETE SELECTED</span> to confirm:</p>
+            <Input
+              value={bulkHardDeleteConfirm}
+              onChange={(e) => setBulkHardDeleteConfirm(e.target.value)}
+              placeholder="Type DELETE SELECTED"
+              className="h-12 rounded-xl text-base tracking-widest font-bold"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="rounded-xl" onClick={() => { setBulkHardDeleteOpen(false); setBulkHardDeleteConfirm(""); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-xl font-bold"
+              disabled={bulkHardDeleteConfirm !== "DELETE SELECTED" || hardDeleting}
+              onClick={bulkHardDelete}
+            >
+              {hardDeleting ? "Deleting..." : `Permanently Delete ${selectedVerbIds.size} Verbs`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete ALL Verbs Confirmation Dialog */}
+      <Dialog open={deleteAllOpen} onOpenChange={(open) => { if (!open) { setDeleteAllOpen(false); setDeleteAllConfirm(""); } }}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" /> ⚠️ Delete ALL Verbs
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete <strong>ALL {verbs.length} verbs</strong> and <strong>every related record</strong> in the database — assignments, practice logs, and session history for <strong>all students</strong>. This action is <strong>completely irreversible</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm font-semibold">Type <span className="font-black text-destructive">DELETE ALL</span> to confirm:</p>
+            <Input
+              value={deleteAllConfirm}
+              onChange={(e) => setDeleteAllConfirm(e.target.value)}
+              placeholder="Type DELETE ALL"
+              className="h-12 rounded-xl text-base tracking-widest font-bold"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="rounded-xl" onClick={() => { setDeleteAllOpen(false); setDeleteAllConfirm(""); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-xl font-bold"
+              disabled={deleteAllConfirm !== "DELETE ALL" || hardDeleting}
+              onClick={deleteAllVerbs}
+            >
+              {hardDeleting ? "Deleting..." : `Delete ALL ${verbs.length} Verbs`}
             </Button>
           </DialogFooter>
         </DialogContent>
