@@ -19,6 +19,7 @@ type Student = {
   daily_quota_minutes: number;
   difficulty_level: string;
   speech_speed: string;
+  korean_hint_mode: boolean;
 };
 
 type Verb = {
@@ -75,7 +76,8 @@ export default function AdminDashboard() {
     daily_quota_minutes: string;
     difficulty_level: string;
     speech_speed: string;
-  }>({ display_name: "", pin: "", daily_quota_minutes: "", difficulty_level: "medium", speech_speed: "medium" });
+    korean_hint_mode: boolean;
+  }>({ display_name: "", pin: "", daily_quota_minutes: "", difficulty_level: "medium", speech_speed: "medium", korean_hint_mode: false });
 
   // Credit adjustment
   const [creditAmount, setCreditAmount] = useState("");
@@ -101,7 +103,7 @@ export default function AdminDashboard() {
     const today = new Date().toISOString().split("T")[0];
 
     const [studentsRes, verbsRes, assignmentsRes, creditRes, usageRes] = await Promise.all([
-      supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed").eq("role", "student"),
+      supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed, korean_hint_mode").eq("role", "student"),
       supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, is_active, verb_no").order("verb_no", { ascending: true }),
       supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, completed_count, last_completed_score, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
       supabase.from("credit_balance").select("balance_usd").limit(1).maybeSingle(),
@@ -184,6 +186,7 @@ export default function AdminDashboard() {
       daily_quota_minutes: String(s.daily_quota_minutes),
       difficulty_level: s.difficulty_level,
       speech_speed: s.speech_speed,
+      korean_hint_mode: s.korean_hint_mode ?? false,
     });
   };
 
@@ -194,6 +197,7 @@ export default function AdminDashboard() {
     if (!isNaN(quota) && quota !== s.daily_quota_minutes) updates.daily_quota_minutes = quota;
     if (editForm.difficulty_level !== s.difficulty_level) updates.difficulty_level = editForm.difficulty_level;
     if (editForm.speech_speed !== s.speech_speed) updates.speech_speed = editForm.speech_speed;
+    if (editForm.korean_hint_mode !== (s.korean_hint_mode ?? false)) updates.korean_hint_mode = editForm.korean_hint_mode;
 
     if (Object.keys(updates).length > 0) {
       const { error } = await supabase.from("profiles").update(updates).eq("id", s.id);
@@ -653,6 +657,13 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                       </div>
+                      <div className="flex items-center justify-between pt-1">
+                        <Label className="text-xs font-semibold">Korean Hints</Label>
+                        <Switch
+                          checked={editForm.korean_hint_mode}
+                          onCheckedChange={(v) => setEditForm(f => ({ ...f, korean_hint_mode: v }))}
+                        />
+                      </div>
                       <Button onClick={() => saveEditStudent(s)} className="w-full h-10 rounded-xl font-bold text-sm gap-2">
                         <Save className="h-4 w-4" /> Save Changes
                       </Button>
@@ -663,9 +674,9 @@ export default function AdminDashboard() {
                         <div>
                           <div className="font-bold text-lg">{s.display_name}</div>
                           <div className="text-sm text-muted-foreground">ID: {s.student_id} | {s.daily_quota_minutes} min/day</div>
-                          <div className="text-xs text-muted-foreground">
-                            Difficulty: {s.difficulty_level} | Speed: {s.speech_speed}
-                          </div>
+                           <div className="text-xs text-muted-foreground">
+                             Difficulty: {s.difficulty_level} | Speed: {s.speech_speed} {s.korean_hint_mode ? "| 🇰🇷 Hints ON" : ""}
+                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="rounded-full">

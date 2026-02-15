@@ -216,6 +216,7 @@ export type Database = {
           difficulty_level: Database["public"]["Enums"]["difficulty_level"]
           display_name: string | null
           id: string
+          korean_hint_mode: boolean
           role: Database["public"]["Enums"]["app_role"]
           speech_speed: Database["public"]["Enums"]["speech_speed"]
           student_id: string | null
@@ -227,6 +228,7 @@ export type Database = {
           difficulty_level?: Database["public"]["Enums"]["difficulty_level"]
           display_name?: string | null
           id: string
+          korean_hint_mode?: boolean
           role: Database["public"]["Enums"]["app_role"]
           speech_speed?: Database["public"]["Enums"]["speech_speed"]
           student_id?: string | null
@@ -238,6 +240,7 @@ export type Database = {
           difficulty_level?: Database["public"]["Enums"]["difficulty_level"]
           display_name?: string | null
           id?: string
+          korean_hint_mode?: boolean
           role?: Database["public"]["Enums"]["app_role"]
           speech_speed?: Database["public"]["Enums"]["speech_speed"]
           student_id?: string | null

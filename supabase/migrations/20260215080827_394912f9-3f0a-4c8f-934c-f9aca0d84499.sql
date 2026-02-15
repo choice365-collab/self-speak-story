@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS korean_hint_mode boolean NOT NULL DEFAULT false;
