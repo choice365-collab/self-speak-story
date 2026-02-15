@@ -16,13 +16,13 @@ export function formatVerbKey(verbKey: string, meaningEn?: string | null): strin
   const idx = verbKey.indexOf("_");
 
   if (idx > 0) {
-    const expression = verbKey.slice(0, idx).trim().toLowerCase();
-    const meaning = verbKey.slice(idx + 1).replace(/_/g, " ").trim().toLowerCase();
+    const expression = verbKey.slice(0, idx).trim();
+    const meaning = verbKey.slice(idx + 1).replace(/_/g, " ").trim();
     return `${expression} → ${meaning}`;
   }
 
   // No underscore — use meaningEn as the meaning side
-  const expression = verbKey.trim().toLowerCase();
-  const meaning = meaningEn?.trim().toLowerCase();
+  const expression = verbKey.trim();
+  const meaning = meaningEn?.trim();
   return meaning ? `${expression} → ${meaning}` : expression;
 }
