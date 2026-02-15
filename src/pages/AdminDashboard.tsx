@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock, Search, CheckCircle2, XCircle, Pencil, X, Save } from "lucide-react";
+import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock, Search, CheckCircle2, XCircle, Pencil, X, Save, Trash2, AlertTriangle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import * as XLSX from "xlsx";
@@ -94,6 +95,37 @@ export default function AdminDashboard() {
   const [verbSearch, setVerbSearch] = useState("");
   const [verbFilterStatus, setVerbFilterStatus] = useState<"all" | "active" | "inactive">("all");
   const [selectedVerbIds, setSelectedVerbIds] = useState<Set<string>>(new Set());
+
+  // Dev mode & hard delete
+  const [devMode, setDevMode] = useState(false);
+  const [hardDeleteVerbId, setHardDeleteVerbId] = useState<string | null>(null);
+  const [hardDeleteConfirmText, setHardDeleteConfirmText] = useState("");
+  const [hardDeleting, setHardDeleting] = useState(false);
+
+  const hardDeleteVerb = async (verbId: string) => {
+    setHardDeleting(true);
+    try {
+      const { data: relatedAssignments } = await supabase
+        .from("assignments").select("id").eq("verb_id", verbId);
+      const assignmentIds = (relatedAssignments || []).map(a => a.id);
+      if (assignmentIds.length > 0) {
+        await supabase.from("practice_logs").delete().in("assignment_id", assignmentIds);
+        await supabase.from("speaking_sessions").delete().in("assignment_id", assignmentIds);
+        await supabase.from("assignments").delete().eq("verb_id", verbId);
+      }
+      const { error } = await supabase.from("verbs").delete().eq("id", verbId);
+      if (error) throw error;
+      setVerbs(prev => prev.filter(v => v.id !== verbId));
+      setAssignments(prev => prev.filter(a => a.verb_id !== verbId));
+      setHardDeleteVerbId(null);
+      setHardDeleteConfirmText("");
+      toast.success("Verb permanently deleted 🗑️");
+    } catch (err: any) {
+      toast.error(err.message || "Delete failed");
+    } finally {
+      setHardDeleting(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -839,6 +871,15 @@ export default function AdminDashboard() {
             })}
           </div>
 
+          {/* Dev Mode Toggle */}
+          <div className="flex items-center justify-between rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              <span className="text-sm font-bold text-destructive">Dev Mode</span>
+            </div>
+            <Switch checked={devMode} onCheckedChange={setDevMode} />
+          </div>
+
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
@@ -933,15 +974,27 @@ export default function AdminDashboard() {
                           </div>
                           <span className={`text-sm ${!v.is_active ? "text-muted-foreground/60" : "text-muted-foreground"}`}>{v.meaning_en}</span>
                         </div>
-                        <Switch
-                          checked={v.is_active}
-                          onCheckedChange={async (checked) => {
-                            const { error } = await supabase.from("verbs").update({ is_active: checked }).eq("id", v.id);
-                            if (error) { toast.error(error.message); return; }
-                            setVerbs(prev => prev.map(verb => verb.id === v.id ? { ...verb, is_active: checked } : verb));
-                            toast.success(checked ? "Activated ✅" : "Deactivated 🗑️");
-                          }}
-                        />
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Switch
+                            checked={v.is_active}
+                            onCheckedChange={async (checked) => {
+                              const { error } = await supabase.from("verbs").update({ is_active: checked }).eq("id", v.id);
+                              if (error) { toast.error(error.message); return; }
+                              setVerbs(prev => prev.map(verb => verb.id === v.id ? { ...verb, is_active: checked } : verb));
+                              toast.success(checked ? "Activated ✅" : "Deactivated 🗑️");
+                            }}
+                          />
+                          {devMode && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="rounded-xl h-8 w-8 p-0"
+                              onClick={() => { setHardDeleteVerbId(v.id); setHardDeleteConfirmText(""); }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </CardContent>
                     </Card>
                   ))}
@@ -980,6 +1033,42 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Hard Delete Confirmation Dialog */}
+      <Dialog open={!!hardDeleteVerbId} onOpenChange={(open) => { if (!open) { setHardDeleteVerbId(null); setHardDeleteConfirmText(""); } }}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" /> Permanently Delete Verb
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete the verb and <strong>all related student data</strong> including assignments, practice logs, and session history. This action is <strong>irreversible</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm font-semibold">Type <span className="font-black text-destructive">DELETE</span> to confirm:</p>
+            <Input
+              value={hardDeleteConfirmText}
+              onChange={(e) => setHardDeleteConfirmText(e.target.value)}
+              placeholder="Type DELETE"
+              className="h-12 rounded-xl text-base tracking-widest font-bold"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="rounded-xl" onClick={() => { setHardDeleteVerbId(null); setHardDeleteConfirmText(""); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-xl font-bold"
+              disabled={hardDeleteConfirmText !== "DELETE" || hardDeleting}
+              onClick={() => hardDeleteVerbId && hardDeleteVerb(hardDeleteVerbId)}
+            >
+              {hardDeleting ? "Deleting..." : "Permanently Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
