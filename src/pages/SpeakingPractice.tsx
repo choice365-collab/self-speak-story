@@ -159,6 +159,7 @@ export default function SpeakingPractice() {
   const [verbData, setVerbData] = useState<VerbData | null>(null);
   const [connectionState, setConnectionState] = useState<"idle" | "connecting" | "connected" | "error">("idle");
   const [isMuted, setIsMuted] = useState(false);
+  const [aiSpeaking, setAiSpeaking] = useState(false);
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [isComplete, setIsComplete] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
@@ -179,6 +180,17 @@ export default function SpeakingPractice() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const totalAudioSecondsRef = useRef(0);
   const sessionStartTimeRef = useRef(Date.now());
+
+  // Mic control: mute while AI speaking, unmute when done
+  const setMicEnabled = useCallback((enabled: boolean) => {
+    const stream = streamRef.current;
+    if (!stream) return;
+    const track = stream.getAudioTracks()[0];
+    if (track) {
+      track.enabled = enabled;
+      setIsMuted(!enabled);
+    }
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -256,6 +268,8 @@ export default function SpeakingPractice() {
   }, [assignmentId]);
 
   const addTranscript = useCallback((role: "user" | "assistant", text: string) => {
+    // Only store assistant transcripts for display (subtitles)
+    // User transcripts stored internally but not displayed
     setTranscripts((prev) => [...prev, { role, text, timestamp: Date.now() }]);
 
     if (role === "assistant") {
@@ -322,6 +336,9 @@ export default function SpeakingPractice() {
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      // Start with mic OFF — AI speaks first
+      stream.getAudioTracks().forEach((track) => { track.enabled = false; });
+      setIsMuted(true);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       const dc = pc.createDataChannel("oai-events");
@@ -331,15 +348,37 @@ export default function SpeakingPractice() {
         try {
           const event = JSON.parse(e.data);
 
+          // AI starts speaking → mic OFF
+          if (event.type === "response.audio.delta") {
+            setAiSpeaking(true);
+            setMicEnabled(false);
+          }
+
+          // AI finished speaking → mic ON
           if (event.type === "response.audio_transcript.done" && event.transcript) {
             addTranscript("assistant", event.transcript);
+            setAiSpeaking(false);
+            setMicEnabled(true);
 
             if (event.transcript.includes("PRACTICE COMPLETE")) {
               handleCompletion();
             }
           }
+
+          // response.done also marks end of AI turn
+          if (event.type === "response.done") {
+            setAiSpeaking(false);
+            setMicEnabled(true);
+          }
+
           if (event.type === "conversation.item.input_audio_transcription.completed" && event.transcript) {
-            addTranscript("user", event.transcript);
+            // Check for Korean input — don't display, just track internally
+            const transcript = event.transcript.trim();
+            if (containsKorean(transcript)) {
+              // Korean detected — AI will handle via system prompt
+              // Don't add to visible transcripts
+            }
+            addTranscript("user", transcript);
             totalAudioSecondsRef.current += 5;
           }
         } catch {}
@@ -401,13 +440,13 @@ export default function SpeakingPractice() {
 
   const toggleMute = useCallback(() => {
     const stream = streamRef.current;
-    if (!stream) return;
+    if (!stream || aiSpeaking) return; // Don't allow unmute while AI speaking
     const track = stream.getAudioTracks()[0];
     if (track) {
       track.enabled = !track.enabled;
       setIsMuted(!track.enabled);
     }
-  }, []);
+  }, [aiSpeaking]);
 
   const handleCompletion = async () => {
     setIsComplete(true);
@@ -512,16 +551,25 @@ export default function SpeakingPractice() {
           <div className="flex justify-center py-6">
             <div
               className={`relative w-32 h-32 rounded-full flex items-center justify-center transition-all duration-500 ${
-                isConnected
-                  ? "bg-secondary/20 shadow-[0_0_40px_hsl(var(--secondary)/0.3)]"
-                  : "bg-primary/20 animate-pulse"
+                aiSpeaking
+                  ? "bg-accent/20 shadow-[0_0_40px_hsl(var(--accent)/0.3)]"
+                  : isConnected
+                    ? "bg-secondary/20 shadow-[0_0_40px_hsl(var(--secondary)/0.3)]"
+                    : "bg-primary/20 animate-pulse"
               }`}
             >
-              <span className="text-4xl">{isConnected ? "🗣️" : "⏳"}</span>
-              {isConnected && (
-                <div className="absolute inset-0 rounded-full border-2 border-secondary/40 animate-ping" />
+              <span className="text-4xl">{isConnected ? (aiSpeaking ? "🔊" : "🎤") : "⏳"}</span>
+              {isConnected && aiSpeaking && (
+                <div className="absolute inset-0 rounded-full border-2 border-accent/40 animate-ping" />
               )}
             </div>
+            {isConnected && (
+              <div className="absolute mt-36 text-center">
+                <span className={`text-xs font-bold ${aiSpeaking ? "text-accent" : "text-secondary"}`}>
+                  {aiSpeaking ? "🔊 Teacher speaking…" : "🎤 Your turn — speak now!"}
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -557,34 +605,31 @@ export default function SpeakingPractice() {
           <div className="text-center text-destructive font-semibold">{error}</div>
         )}
 
-        {isConnected && isMuted && (
+        {isConnected && isMuted && !aiSpeaking && (
           <div className="text-center text-sm text-muted-foreground font-semibold">🔇 Microphone muted</div>
         )}
 
-        {/* Transcripts */}
-        {transcripts.map((t, i) => {
-          // Parse Korean hints from assistant messages
+        {/* AI Subtitles only — no student transcripts displayed */}
+        {transcripts.filter((t) => t.role === "assistant").map((t, i) => {
           let mainText = t.text;
           let koreanHint: string | null = null;
-          if (t.role === "assistant") {
-            const koMatch = t.text.match(/\[KO:\s*(.+?)\]/);
-            if (koMatch) {
-              koreanHint = koMatch[1];
-              mainText = t.text.replace(/\[KO:\s*.+?\]/g, "").trim();
-            }
+          const koMatch = t.text.match(/\[KO:\s*(.+?)\]/);
+          if (koMatch) {
+            koreanHint = koMatch[1];
+            mainText = t.text.replace(/\[KO:\s*.+?\]/g, "").trim();
           }
           return (
-          <div key={i} className={`flex ${t.role === "user" ? "justify-end" : "justify-start"}`}>
-            <Card className={`max-w-[85%] rounded-2xl ${t.role === "user" ? "bg-primary text-primary-foreground" : "kid-shadow"}`}>
-              <CardContent className="pt-3 pb-3 px-4">
-                <p className="text-sm font-semibold mb-1">{t.role === "user" ? "🎤 You" : "🤖 Teacher"}</p>
-                <p className="text-base whitespace-pre-wrap">{mainText}</p>
-                {koreanHint && (
-                  <p className="text-sm text-muted-foreground mt-1 border-t pt-1">🇰🇷 {koreanHint}</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+            <div key={i} className="flex justify-start">
+              <Card className="max-w-[85%] rounded-2xl kid-shadow">
+                <CardContent className="pt-3 pb-3 px-4">
+                  <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
+                  <p className="text-base whitespace-pre-wrap">{mainText}</p>
+                  {koreanHint && (
+                    <p className="text-sm text-muted-foreground mt-1 border-t pt-1">🇰🇷 {koreanHint}</p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           );
         })}
         <div ref={messagesEndRef} />
