@@ -1,19 +1,28 @@
 /**
- * Converts an internal verb_key like "GET_READY_PREPARE"
- * into a student-facing display: "get ready → prepare"
+ * Converts an internal verb_key into a student-facing display.
  *
  * Rules:
- * - Split at the LAST underscore
- * - Left = expression, Right = meaning
- * - Replace remaining underscores with spaces
- * - Lowercase everything
+ * - If verb_key contains "_": split at the FIRST underscore.
+ *   Left = expression, Right = meaning (remaining "_" → spaces).
+ * - If no "_": expression = verb_key, meaning = meaningEn fallback.
+ * - Lowercase & trim everything.
+ *
+ * Examples:
+ *   "get_receive"              → "get → receive"
+ *   "get_better_become_better" → "get → better become better"
+ *   "get ready" + "prepare"    → "get ready → prepare"
  */
-export function formatVerbKey(verbKey: string): string {
-  const lastUnderscore = verbKey.lastIndexOf("_");
-  if (lastUnderscore <= 0) return verbKey.toLowerCase();
+export function formatVerbKey(verbKey: string, meaningEn?: string | null): string {
+  const idx = verbKey.indexOf("_");
 
-  const expression = verbKey.slice(0, lastUnderscore).replace(/_/g, " ").toLowerCase();
-  const meaning = verbKey.slice(lastUnderscore + 1).replace(/_/g, " ").toLowerCase();
+  if (idx > 0) {
+    const expression = verbKey.slice(0, idx).trim().toLowerCase();
+    const meaning = verbKey.slice(idx + 1).replace(/_/g, " ").trim().toLowerCase();
+    return `${expression} → ${meaning}`;
+  }
 
-  return `${expression} → ${meaning}`;
+  // No underscore — use meaningEn as the meaning side
+  const expression = verbKey.trim().toLowerCase();
+  const meaning = meaningEn?.trim().toLowerCase();
+  return meaning ? `${expression} → ${meaning}` : expression;
 }
