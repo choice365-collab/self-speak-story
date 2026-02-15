@@ -311,6 +311,7 @@ export type Database = {
           base_verb: string
           created_at: string
           created_by: string | null
+          display_no: number | null
           id: string
           is_active: boolean
           meaning_en: string | null
@@ -331,6 +332,7 @@ export type Database = {
           base_verb: string
           created_at?: string
           created_by?: string | null
+          display_no?: number | null
           id?: string
           is_active?: boolean
           meaning_en?: string | null
@@ -351,6 +353,7 @@ export type Database = {
           base_verb?: string
           created_at?: string
           created_by?: string | null
+          display_no?: number | null
           id?: string
           is_active?: boolean
           meaning_en?: string | null

@@ -1,0 +1,1 @@
+ALTER TABLE public.verbs ADD COLUMN display_no integer;

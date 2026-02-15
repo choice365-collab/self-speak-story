@@ -29,6 +29,7 @@ type Verb = {
   meaning_en: string | null;
   is_active: boolean;
   verb_no: number;
+  display_no: number | null;
 };
 
 type AssignmentView = {
@@ -104,7 +105,7 @@ export default function AdminDashboard() {
 
     const [studentsRes, verbsRes, assignmentsRes, creditRes, usageRes] = await Promise.all([
       supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed, korean_hint_mode").eq("role", "student"),
-      supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, is_active, verb_no").order("verb_no", { ascending: true }),
+      supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, is_active, verb_no, display_no").order("verb_no", { ascending: true }),
       supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, completed_count, last_completed_score, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
       supabase.from("credit_balance").select("balance_usd").limit(1).maybeSingle(),
       supabase.from("daily_usage").select("student_id, used_seconds").eq("date", today),
@@ -330,7 +331,7 @@ export default function AdminDashboard() {
   const downloadVerbLibrary = async () => {
     const { data, error } = await supabase
       .from("verbs")
-      .select("verb_no, verb_key, base_verb, meaning_en, is_active, anchor_short_1, anchor_short_2, anchor_short_3, anchor_long_1, anchor_long_2, anchor_long_3, situation_seed_1, situation_seed_2, situation_seed_3, situation_seed_4")
+      .select("verb_no, display_no, verb_key, base_verb, meaning_en, is_active, anchor_short_1, anchor_short_2, anchor_short_3, anchor_long_1, anchor_long_2, anchor_long_3, situation_seed_1, situation_seed_2, situation_seed_3, situation_seed_4")
       .order("verb_no", { ascending: true });
     if (error || !data) {
       toast.error(error?.message || "Failed to load verbs");
@@ -374,6 +375,10 @@ export default function AdminDashboard() {
         };
         if (hasIsActiveColumn) {
           base.is_active = row.is_active === false || row.is_active === "false" || row.is_active === 0 ? false : true;
+        }
+        if (row.display_no !== undefined && row.display_no !== null && row.display_no !== "") {
+          base.display_no = parseInt(row.display_no);
+          if (isNaN(base.display_no)) delete base.display_no;
         }
         return base;
       }).filter((v: any) => v.verb_key && v.base_verb);
@@ -796,7 +801,7 @@ export default function AdminDashboard() {
             <CardHeader><CardTitle className="text-lg">📤 Upload Verbs (Excel)</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground mb-1">
-                Columns: verb_key, base_verb, meaning_en, is_active, example_short_1~3, example_long_1~3, situation_1~5
+                Columns: verb_key, base_verb, meaning_en, display_no (optional), is_active, anchor_short_1~3, anchor_long_1~3, situation_seed_1~4
               </p>
               <p className="text-xs text-muted-foreground">
                 Existing verb_key → updated. New verb_key → inserted &amp; assigned to all students.
@@ -914,7 +919,7 @@ export default function AdminDashboard() {
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant="outline" className="rounded-full text-xs font-black px-1.5 py-0 shrink-0">#{v.verb_no}</Badge>
+                            <Badge variant="outline" className="rounded-full text-xs font-black px-1.5 py-0 shrink-0">#{v.display_no ?? v.verb_no}</Badge>
                             <span className={`font-bold capitalize ${!v.is_active ? "text-muted-foreground" : ""}`}>{v.base_verb}</span>
                             {v.is_active ? (
                               <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px] px-1.5 py-0">
