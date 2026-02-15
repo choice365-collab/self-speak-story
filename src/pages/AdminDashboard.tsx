@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock, Search, CheckCircle2, XCircle } from "lucide-react";
+import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock, Search, CheckCircle2, XCircle, Pencil, X, Save } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import * as XLSX from "xlsx";
@@ -38,6 +38,8 @@ type AssignmentView = {
   student_id: string;
   verb_id: string;
   completed_at: string | null;
+  completed_count: number;
+  last_completed_score: number | null;
   profiles: { student_id: string | null; display_name: string | null } | null;
   verbs: { base_verb: string; meaning_en: string | null } | null;
 };
@@ -65,6 +67,16 @@ export default function AdminDashboard() {
   const [newStudentSpeed, setNewStudentSpeed] = useState<"slow" | "medium" | "fast">("medium");
   const [creatingStudent, setCreatingStudent] = useState(false);
 
+  // Edit student
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    display_name: string;
+    pin: string;
+    daily_quota_minutes: string;
+    difficulty_level: string;
+    speech_speed: string;
+  }>({ display_name: "", pin: "", daily_quota_minutes: "", difficulty_level: "medium", speech_speed: "medium" });
+
   // Credit adjustment
   const [creditAmount, setCreditAmount] = useState("");
   const [creditNote, setCreditNote] = useState("");
@@ -91,7 +103,7 @@ export default function AdminDashboard() {
     const [studentsRes, verbsRes, assignmentsRes, creditRes, usageRes] = await Promise.all([
       supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed").eq("role", "student"),
       supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, is_active, verb_no").order("verb_no", { ascending: true }),
-      supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
+      supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, completed_count, last_completed_score, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
       supabase.from("credit_balance").select("balance_usd").limit(1).maybeSingle(),
       supabase.from("daily_usage").select("student_id, used_seconds").eq("date", today),
     ]);
@@ -146,7 +158,7 @@ export default function AdminDashboard() {
             login_id: newStudentId,
             pin: newStudentPin,
             display_name: newStudentName || newStudentId,
-            daily_quota_minutes: parseInt(newStudentQuota) || 10,
+            daily_quota_minutes: parseInt(newStudentQuota) || 60,
             difficulty_level: newStudentDifficulty,
             speech_speed: newStudentSpeed,
           }),
@@ -161,6 +173,56 @@ export default function AdminDashboard() {
     } finally {
       setCreatingStudent(false);
     }
+  };
+
+  // Edit student
+  const startEditStudent = (s: Student) => {
+    setEditingStudentId(s.id);
+    setEditForm({
+      display_name: s.display_name || "",
+      pin: "",
+      daily_quota_minutes: String(s.daily_quota_minutes),
+      difficulty_level: s.difficulty_level,
+      speech_speed: s.speech_speed,
+    });
+  };
+
+  const saveEditStudent = async (s: Student) => {
+    const updates: any = {};
+    if (editForm.display_name !== (s.display_name || "")) updates.display_name = editForm.display_name;
+    const quota = parseInt(editForm.daily_quota_minutes);
+    if (!isNaN(quota) && quota !== s.daily_quota_minutes) updates.daily_quota_minutes = quota;
+    if (editForm.difficulty_level !== s.difficulty_level) updates.difficulty_level = editForm.difficulty_level;
+    if (editForm.speech_speed !== s.speech_speed) updates.speech_speed = editForm.speech_speed;
+
+    if (Object.keys(updates).length > 0) {
+      const { error } = await supabase.from("profiles").update(updates).eq("id", s.id);
+      if (error) { toast.error(error.message); return; }
+      setStudents(prev => prev.map(st => st.id === s.id ? { ...st, ...updates } : st));
+    }
+
+    // Update PIN if provided
+    if (editForm.pin && editForm.pin.length === 4 && /^\d{4}$/.test(editForm.pin)) {
+      const session = (await supabase.auth.getSession()).data.session;
+      if (session) {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ user_id: s.id, pin: editForm.pin, student_id: s.student_id }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          toast.error(data.error || "Failed to update PIN");
+          return;
+        }
+      }
+    }
+
+    setEditingStudentId(null);
+    toast.success("Student updated! ✅");
   };
 
   // ---- Student Excel Export ----
@@ -205,7 +267,6 @@ export default function AdminDashboard() {
         const existing = students.find(s => s.student_id === sid);
 
         if (existing) {
-          // UPDATE existing student profile
           const updates: any = {};
           if (row.display_name !== undefined) updates.display_name = row.display_name;
           if (row.daily_limit_min !== undefined) updates.daily_quota_minutes = parseInt(row.daily_limit_min) || 60;
@@ -216,7 +277,6 @@ export default function AdminDashboard() {
           }
           updated++;
         } else {
-          // INSERT new student via create-user edge function
           const pin = String(row.pin || "").padStart(4, "0");
           if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
             toast.error(`Skipped ${sid}: invalid PIN "${row.pin}"`);
@@ -233,7 +293,7 @@ export default function AdminDashboard() {
               login_id: sid,
               pin,
               display_name: row.display_name || sid,
-              daily_quota_minutes: parseInt(row.daily_limit_min) || 10,
+              daily_quota_minutes: parseInt(row.daily_limit_min) || 60,
             }),
           });
           const data = await res.json();
@@ -242,7 +302,6 @@ export default function AdminDashboard() {
             continue;
           }
 
-          // Update difficulty/speed if provided (create-user defaults to medium/medium)
           if (data.user_id) {
             const extraUpdates: any = {};
             if (row.difficulty && ["low", "medium", "high"].includes(row.difficulty)) extraUpdates.difficulty_level = row.difficulty;
@@ -321,7 +380,6 @@ export default function AdminDashboard() {
         return;
       }
 
-      // Separate into updates vs inserts by checking existing verb_keys
       const { data: existingVerbs } = await supabase
         .from("verbs")
         .select("id, verb_key");
@@ -330,13 +388,11 @@ export default function AdminDashboard() {
       const toUpdate = verbRows.filter(v => existingMap.has(v.verb_key));
       const toInsert = verbRows.filter(v => !existingMap.has(v.verb_key));
 
-      // Update existing verbs — exclude created_by and verb_key, and exclude is_active if column absent
       for (const v of toUpdate) {
         const { created_by: _cb, verb_key: _vk, ...updateData } = v;
         await supabase.from("verbs").update(updateData).eq("verb_key", v.verb_key);
       }
 
-      // Insert new verbs — default is_active to true if column absent
       const insertRows = toInsert.map(v => {
         const { created_by, ...rest } = v;
         return { ...rest, created_by, is_active: v.is_active ?? true };
@@ -349,10 +405,8 @@ export default function AdminDashboard() {
         newVerbIds = (insertedVerbs || []) as { id: string; verb_no: number }[];
       }
 
-      // Auto-assign NEW verbs to all students using verb_no as task_no
       if (newVerbIds.length > 0 && students.length > 0) {
         for (const s of students) {
-          // Get existing verb_ids for this student to avoid duplicates
           const { data: existing } = await supabase
             .from("assignments").select("verb_id").eq("student_id", s.id);
           const existingVerbIds = new Set((existing || []).map(a => a.verb_id));
@@ -389,7 +443,6 @@ export default function AdminDashboard() {
 
     const signedAmount = creditType === "deduct" ? -Math.abs(amount) : Math.abs(amount);
 
-    // Insert credit event
     const { error: eventError } = await supabase.from("credit_events").insert({
       type: creditType,
       amount_usd: signedAmount,
@@ -400,12 +453,11 @@ export default function AdminDashboard() {
       return;
     }
 
-    // Update credit balance
     const newBalance = creditBalance + signedAmount;
     const { error: balanceError } = await supabase
       .from("credit_balance")
       .update({ balance_usd: newBalance, updated_at: new Date().toISOString() })
-      .not("id", "is", null); // update all (single row)
+      .not("id", "is", null);
 
     if (balanceError) {
       toast.error(balanceError.message);
@@ -494,7 +546,7 @@ export default function AdminDashboard() {
                 <Label className="text-sm font-semibold">Daily Speaking Limit</Label>
                 <div className="relative">
                   <Input type="number" value={newStudentQuota} onChange={(e) => setNewStudentQuota(e.target.value)}
-                    placeholder="10" className="h-12 rounded-xl text-base pr-20" />
+                    placeholder="60" className="h-12 rounded-xl text-base pr-20" />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">min/day</span>
                 </div>
               </div>
@@ -553,25 +605,83 @@ export default function AdminDashboard() {
             const studentAssignments = assignments.filter(a => a.student_id === s.id);
             const completed = studentAssignments.filter(a => a.status === "completed").length;
             const studentUsage = todayUsage.find(u => u.student_id === s.id);
+            const isEditing = editingStudentId === s.id;
+
             return (
               <Card key={s.id} className="rounded-2xl kid-shadow">
                 <CardContent className="pt-4 pb-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <div>
-                      <div className="font-bold text-lg">{s.display_name}</div>
-                      <div className="text-sm text-muted-foreground">ID: {s.student_id} | {s.daily_quota_minutes} min/day</div>
-                      <div className="text-xs text-muted-foreground">
-                        Difficulty: {s.difficulty_level} | Speed: {s.speech_speed}
+                  {isEditing ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-muted-foreground">Editing: {s.student_id}</span>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingStudentId(null)} className="rounded-xl h-8 w-8 p-0">
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
+                      <Input value={editForm.display_name} onChange={(e) => setEditForm(f => ({ ...f, display_name: e.target.value }))}
+                        placeholder="Display Name" className="h-10 rounded-xl text-sm" />
+                      <Input type="tel" value={editForm.pin}
+                        onChange={(e) => setEditForm(f => ({ ...f, pin: e.target.value.replace(/\D/g, "").slice(0, 4) }))}
+                        placeholder="New 4-digit PIN (leave empty to keep)" maxLength={4} className="h-10 rounded-xl text-sm tracking-widest" />
+                      <div className="relative">
+                        <Input type="number" value={editForm.daily_quota_minutes}
+                          onChange={(e) => setEditForm(f => ({ ...f, daily_quota_minutes: e.target.value }))}
+                          className="h-10 rounded-xl text-sm pr-20" />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">min/day</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs font-semibold">Difficulty</Label>
+                          <div className="flex rounded-lg border overflow-hidden mt-1">
+                            {([["L", "low"], ["M", "medium"], ["H", "high"]] as const).map(([label, value]) => (
+                              <button key={value} type="button"
+                                onClick={() => setEditForm(f => ({ ...f, difficulty_level: value }))}
+                                className={`flex-1 h-8 text-xs font-bold transition-colors ${editForm.difficulty_level === value ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                              >{label}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-xs font-semibold">Speed</Label>
+                          <div className="flex rounded-lg border overflow-hidden mt-1">
+                            {([["L", "slow"], ["M", "medium"], ["H", "fast"]] as const).map(([label, value]) => (
+                              <button key={value} type="button"
+                                onClick={() => setEditForm(f => ({ ...f, speech_speed: value }))}
+                                className={`flex-1 h-8 text-xs font-bold transition-colors ${editForm.speech_speed === value ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                              >{label}</button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <Button onClick={() => saveEditStudent(s)} className="w-full h-10 rounded-xl font-bold text-sm gap-2">
+                        <Save className="h-4 w-4" /> Save Changes
+                      </Button>
                     </div>
-                    <Badge variant="outline" className="rounded-full">
-                      {completed}/{studentAssignments.length} done
-                    </Badge>
-                  </div>
-                  {studentUsage && (
-                    <div className="text-xs text-muted-foreground mt-1">
-                      Today: {Math.floor(studentUsage.used_seconds / 60)}m {studentUsage.used_seconds % 60}s used
-                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between mb-1">
+                        <div>
+                          <div className="font-bold text-lg">{s.display_name}</div>
+                          <div className="text-sm text-muted-foreground">ID: {s.student_id} | {s.daily_quota_minutes} min/day</div>
+                          <div className="text-xs text-muted-foreground">
+                            Difficulty: {s.difficulty_level} | Speed: {s.speech_speed}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="rounded-full">
+                            {completed}/{studentAssignments.length} done
+                          </Badge>
+                          <Button size="sm" variant="ghost" onClick={() => startEditStudent(s)} className="rounded-xl h-8 w-8 p-0">
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      {studentUsage && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Today: {Math.floor(studentUsage.used_seconds / 60)}m {studentUsage.used_seconds % 60}s used
+                        </div>
+                      )}
+                    </>
                   )}
                 </CardContent>
               </Card>
@@ -628,6 +738,11 @@ export default function AdminDashboard() {
                     <div className="text-sm text-muted-foreground truncate">{a.verbs?.base_verb} - {a.verbs?.meaning_en}</div>
                     {a.completed_at && (
                       <div className="text-xs text-muted-foreground">Done: {new Date(a.completed_at).toLocaleDateString()}</div>
+                    )}
+                    {a.completed_count > 0 && (
+                      <div className="text-xs font-semibold text-secondary">
+                        Completed x{a.completed_count}{a.last_completed_score != null ? ` · Score: ${a.last_completed_score}` : ""}
+                      </div>
                     )}
                   </div>
                 </div>

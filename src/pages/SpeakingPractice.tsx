@@ -31,15 +31,12 @@ type TranscriptEntry = {
   timestamp: number;
 };
 
-const REQUIRED_PASSES = 3;
-const TARGET_SECONDS = 300;
-
 function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
-  const situations = [verb.situation_1, verb.situation_2, verb.situation_3, verb.situation_4, verb.situation_5].filter(Boolean);
-  const examples = [verb.example_short_1, verb.example_short_2, verb.example_short_3].filter(Boolean);
+  const situations = [verb.situation_1, verb.situation_2, verb.situation_3, verb.situation_4].filter(Boolean);
+  const shortExamples = [verb.example_short_1, verb.example_short_2, verb.example_short_3].filter(Boolean);
   const longExamples = [verb.example_long_1, verb.example_long_2, verb.example_long_3].filter(Boolean);
+  const allExamples = [...shortExamples, ...longExamples];
 
-  // Difficulty adjustments
   const difficultyGuides: Record<string, string> = {
     low: "Use only simple sentences (subject + verb + object). Avoid complex grammar, conditionals, or passive voice. Use basic vocabulary only.",
     medium: "Use moderate grammar complexity. You may use simple compound sentences and common expressions. Keep vocabulary accessible.",
@@ -47,47 +44,70 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
   };
   const difficultyGuide = difficultyGuides[difficultyLevel] || difficultyGuides["medium"];
 
-  // Speech speed adjustments
+  // ~30% slower across all levels
   const speedGuides: Record<string, string> = {
-    slow: "Speak VERY slowly and clearly. Use SHORT sentences (5-8 words max). Pause between sentences. Repeat key phrases.",
-    medium: "Speak at a moderate pace. Use sentences of normal length. Be clear but natural.",
-    fast: "Speak at a natural, conversational pace. Use longer sentences when appropriate. Keep the conversation flowing quickly.",
+    slow: "Speak EXTREMELY slowly and clearly with long pauses between words. Use VERY SHORT sentences (3-6 words max). Pause 2-3 seconds between sentences. Repeat every key phrase twice.",
+    medium: "Speak slowly and clearly. Use short sentences (5-8 words). Pause between sentences. Enunciate each word distinctly.",
+    fast: "Speak at a moderate, unhurried pace. Use sentences of normal length. Be clear and deliberate, not rushed.",
   };
   const speedGuide = speedGuides[speechSpeed] || speedGuides["medium"];
 
-  return `You are a friendly, encouraging English teacher helping a Korean student practice speaking English.
-You ONLY speak English.
+  const exampleList = allExamples.map((e, i) => `  ${i + 1}. "${e}"`).join("\n");
+  const situationList = situations.map((s, i) => `  ${i + 1}. ${s}`).join("\n");
+
+  return `You are a friendly, patient, encouraging English teacher helping a Korean child practice speaking English.
+You ONLY speak English. NEVER use Korean.
 
 DIFFICULTY LEVEL: ${difficultyLevel.toUpperCase()}
 ${difficultyGuide}
 
 SPEAKING PACE: ${speechSpeed.toUpperCase()}
 ${speedGuide}
+IMPORTANT: Speak about 30% slower than your normal speed. Take your time. Pause often.
 
 The student is learning the phrasal verb: "${verb.base_verb}"
 Meaning: ${verb.meaning_en || ""}
 
-SHORT EXAMPLES: ${examples.join(" / ")}
-LONG EXAMPLES: ${longExamples.join(" / ")}
-PRACTICE SITUATIONS: ${situations.join(" / ")}
+===== STEP A: EXPLANATION & REPEAT-AFTER-ME =====
+1. Greet the student warmly. Briefly explain what "${verb.base_verb}" means in simple English (1-2 sentences).
+2. Then go through EACH of these example sentences ONE BY ONE:
+${exampleList}
 
-YOUR TEACHING FLOW:
-1. FIRST, greet the student warmly and briefly explain what "${verb.base_verb}" means in simple English. Give 2-3 short example sentences.
-2. THEN, pick one situation from the list above and ask the student to make a sentence using "${verb.base_verb}".
-3. WHEN the student responds:
-   - Always acknowledge their effort positively
-   - If there are mistakes, gently correct them and give the corrected sentence
-   - Ask them to try again with the correction
-   - If correct, praise them enthusiastically and move to the next situation
-4. REPEAT with different situations. After 3 successful uses, congratulate them and say "PRACTICE COMPLETE!"
+For EACH example sentence:
+  a) Say the sentence clearly and slowly
+  b) Say "Now repeat after me: [sentence]"
+  c) Wait for the student to repeat
+  d) If correct → praise enthusiastically, move to next example
+  e) If incorrect → gently correct, give the right sentence, ask them to repeat 2-3 times until correct
+
+===== STEP B: SITUATION PRACTICE =====
+After ALL examples are done, move to situation practice using these 4 situations:
+${situationList}
+
+For EACH situation:
+  a) Describe the situation clearly
+  b) Ask: "Can you make a sentence using '${verb.base_verb}'?"
+  c) Wait for the student to respond
+  d) If correct → praise, ask them to repeat once more for practice
+  e) If incorrect → correct gently, provide the corrected sentence, ask them to repeat 2-3 times
+  f) After the student succeeds, give a score from 0-100 based on grammar, meaning, and fluency. Say "Score: [number]" clearly.
+
+===== SILENCE HANDLING =====
+If the student is silent for about 7 seconds after you ask them to speak:
+  - Give a strong hint: "Here's a hint! Try saying: [almost complete model sentence with a blank]. Can you fill in the blank?"
+  - If still silent after another 7 seconds: Give the full answer and ask them to just repeat it: "Let's try this: [full sentence]. Please repeat after me!"
+  - Maximum 2 re-prompts per turn before simplifying and moving on.
+
+===== COMPLETION =====
+After completing ALL 4 situations successfully, congratulate the student enthusiastically and say exactly "PRACTICE COMPLETE!" at the end.
 
 IMPORTANT RULES:
 - Keep each response SHORT (2-3 sentences max)
 - Be very encouraging and patient
-- If the student seems stuck, give hints
+- Speak slowly and clearly
 - Always bring the conversation back to practicing "${verb.base_verb}"
-- When the student successfully uses the verb correctly 3 times, say exactly "PRACTICE COMPLETE!" at the end of your response
-- Do NOT switch to Korean. Always respond in English.`;
+- Do NOT switch to Korean. Always respond in English.
+- When giving scores, say "Score: [number]" clearly so it can be parsed.`;
 }
 
 export default function SpeakingPractice() {
@@ -111,6 +131,7 @@ export default function SpeakingPractice() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const totalAudioSecondsRef = useRef(0);
   const sessionStartTimeRef = useRef(Date.now());
+  const scoresRef = useRef<number[]>([]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -158,7 +179,7 @@ export default function SpeakingPractice() {
   const updateDailyUsage = async (addSeconds: number) => {
     if (!user) return;
     const today = new Date().toISOString().split("T")[0];
-    const limitSeconds = (profile?.daily_quota_minutes || 10) * 60;
+    const limitSeconds = (profile?.daily_quota_minutes || 60) * 60;
     const { data: existing } = await supabase
       .from("daily_usage")
       .select("id, used_seconds")
@@ -181,6 +202,17 @@ export default function SpeakingPractice() {
 
   const addTranscript = useCallback((role: "user" | "assistant", text: string) => {
     setTranscripts((prev) => [...prev, { role, text, timestamp: Date.now() }]);
+
+    // Parse scores from AI responses
+    if (role === "assistant") {
+      const scoreMatch = text.match(/Score:\s*(\d+)/i);
+      if (scoreMatch) {
+        const score = parseInt(scoreMatch[1]);
+        if (score >= 0 && score <= 100) {
+          scoresRef.current.push(score);
+        }
+      }
+    }
   }, []);
 
   const connect = useCallback(async () => {
@@ -202,7 +234,9 @@ export default function SpeakingPractice() {
           body: JSON.stringify({
             voice: "alloy",
             instructions,
-            turn_detection: { type: "server_vad" },
+            turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 700 },
+            input_audio_transcription: { model: "gpt-4o-mini-transcribe" },
+            speed: profile?.speech_speed || "medium",
           }),
         }
       );
@@ -216,7 +250,6 @@ export default function SpeakingPractice() {
       const ephemeralKey = session.client_secret?.value;
       if (!ephemeralKey) throw new Error("No ephemeral key returned");
 
-      // Create peer connection
       const pc = new RTCPeerConnection();
       pcRef.current = pc;
 
@@ -228,12 +261,10 @@ export default function SpeakingPractice() {
         audio.srcObject = e.streams[0];
       };
 
-      // Get microphone
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      // Data channel for events
       const dc = pc.createDataChannel("oai-events");
       dcRef.current = dc;
 
@@ -241,24 +272,20 @@ export default function SpeakingPractice() {
         try {
           const event = JSON.parse(e.data);
 
-          // Capture completed transcripts
           if (event.type === "response.audio_transcript.done" && event.transcript) {
             addTranscript("assistant", event.transcript);
 
-            // Check for completion signal
             if (event.transcript.includes("PRACTICE COMPLETE")) {
               handleCompletion();
             }
           }
           if (event.type === "conversation.item.input_audio_transcription.completed" && event.transcript) {
             addTranscript("user", event.transcript);
-            // Track audio seconds
-            totalAudioSecondsRef.current += 5; // approximate per turn
+            totalAudioSecondsRef.current += 5;
           }
         } catch {}
       };
 
-      // SDP exchange
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
@@ -297,7 +324,7 @@ export default function SpeakingPractice() {
       setError(e.message || "Failed to connect");
       toast.error(e.message || "Failed to connect");
     }
-  }, [verbData, addTranscript]);
+  }, [verbData, addTranscript, profile]);
 
   const disconnect = useCallback(() => {
     dcRef.current?.close();
@@ -327,12 +354,30 @@ export default function SpeakingPractice() {
     setIsComplete(true);
     const totalSessionSeconds = Math.floor((Date.now() - sessionStart) / 1000);
 
+    // Calculate average score
+    const scores = scoresRef.current;
+    const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+
     // Update daily usage
     await updateDailyUsage(totalAudioSecondsRef.current);
 
-    // Mark assignment complete
+    // Get current assignment to increment completed_count
+    const { data: currentAssignment } = await supabase
+      .from("assignments")
+      .select("completed_count")
+      .eq("id", assignmentId)
+      .single();
+
+    const newCount = ((currentAssignment as any)?.completed_count || 0) + 1;
+
+    // Mark assignment complete with score
     await supabase.from("assignments")
-      .update({ status: "completed", completed_at: new Date().toISOString() })
+      .update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        completed_count: newCount,
+        ...(avgScore != null ? { last_completed_score: avgScore } : {}),
+      })
       .eq("id", assignmentId);
 
     // Record speaking session
@@ -342,9 +387,21 @@ export default function SpeakingPractice() {
         assignment_id: assignmentId,
         duration_seconds: totalSessionSeconds,
       });
+
+      // Save practice logs with scores
+      if (scores.length > 0) {
+        const logs = scores.map((score, i) => ({
+          student_id: user.id,
+          assignment_id: assignmentId,
+          situation_index: i + 1,
+          score,
+          audio_seconds: Math.floor(totalAudioSecondsRef.current / Math.max(scores.length, 1)),
+          result: score >= 50 ? "pass" : "fail",
+        }));
+        await supabase.from("practice_logs").insert(logs);
+      }
     }
 
-    // Disconnect after a short delay
     setTimeout(() => disconnect(), 2000);
   };
 
@@ -406,7 +463,6 @@ export default function SpeakingPractice() {
 
       {/* Main area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Visualizer */}
         {(isConnected || isConnecting) && (
           <div className="flex justify-center py-6">
             <div
@@ -424,7 +480,6 @@ export default function SpeakingPractice() {
           </div>
         )}
 
-        {/* Status message before connection */}
         {connectionState === "idle" && !isComplete && (
           <div className="text-center py-12 space-y-3">
             <div className="text-5xl">🎙️</div>
@@ -478,11 +533,11 @@ export default function SpeakingPractice() {
               {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
             </Button>
             <Button
-              onClick={() => { disconnect(); setConnectionState("idle"); }}
+              onClick={() => { disconnect(); navigate("/"); }}
               variant="destructive"
               className="h-16 px-8 text-lg font-bold rounded-2xl kid-shadow gap-2"
             >
-              <PhoneOff className="h-6 w-6" /> End
+              <PhoneOff className="h-6 w-6" /> Stop
             </Button>
           </div>
         )}

@@ -40,8 +40,10 @@ export type Database = {
           assigned_at: string
           assigned_by: string | null
           completed_at: string | null
+          completed_count: number
           id: string
           is_enabled: boolean
+          last_completed_score: number | null
           status: string
           student_id: string
           task_no: number
@@ -51,8 +53,10 @@ export type Database = {
           assigned_at?: string
           assigned_by?: string | null
           completed_at?: string | null
+          completed_count?: number
           id?: string
           is_enabled?: boolean
+          last_completed_score?: number | null
           status?: string
           student_id: string
           task_no: number
@@ -62,8 +66,10 @@ export type Database = {
           assigned_at?: string
           assigned_by?: string | null
           completed_at?: string | null
+          completed_count?: number
           id?: string
           is_enabled?: boolean
+          last_completed_score?: number | null
           status?: string
           student_id?: string
           task_no?: number
@@ -161,6 +167,7 @@ export type Database = {
           created_at: string
           id: string
           result: string
+          score: number | null
           situation_index: number
           student_id: string
           student_transcript: string | null
@@ -173,6 +180,7 @@ export type Database = {
           created_at?: string
           id?: string
           result?: string
+          score?: number | null
           situation_index?: number
           student_id: string
           student_transcript?: string | null
@@ -185,6 +193,7 @@ export type Database = {
           created_at?: string
           id?: string
           result?: string
+          score?: number | null
           situation_index?: number
           student_id?: string
           student_transcript?: string | null

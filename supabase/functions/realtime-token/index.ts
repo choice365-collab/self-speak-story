@@ -19,7 +19,10 @@ serve(async (req) => {
       });
     }
 
-    const { model = "gpt-4o-mini-realtime-preview", voice = "alloy", instructions, turn_detection, input_audio_transcription } = await req.json().catch(() => ({}));
+    const { model = "gpt-4o-mini-realtime-preview", voice = "alloy", instructions, turn_detection, input_audio_transcription, speed } = await req.json().catch(() => ({}));
+
+    // Speed is handled via instructions prompt (~30% slower overall)
+    // The instructions already contain pace guidance per speed level
 
     const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
       method: "POST",
@@ -33,6 +36,8 @@ serve(async (req) => {
         ...(instructions ? { instructions } : {}),
         ...(turn_detection ? { turn_detection } : {}),
         ...(input_audio_transcription ? { input_audio_transcription } : {}),
+        output_audio_format: "pcm16",
+        temperature: 0.7,
       }),
     });
 
