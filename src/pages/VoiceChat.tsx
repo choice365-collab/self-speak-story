@@ -15,6 +15,7 @@ export default function VoiceChat() {
     state,
     error,
     isMuted,
+    micStatus,
     transcripts,
     partialTranscript,
     debugLog,
@@ -52,6 +53,11 @@ export default function VoiceChat() {
         <Badge className={`rounded-full text-xs font-bold px-3 ${statusColor}`}>
           {state === "disconnected" ? "Ready" : state.charAt(0).toUpperCase() + state.slice(1)}
         </Badge>
+        {!isConnected && (
+          <Badge variant="outline" className={`rounded-full text-xs px-3 ${micStatus === "ready" ? "border-secondary text-secondary" : micStatus === "denied" ? "border-destructive text-destructive" : "border-muted-foreground text-muted-foreground"}`}>
+            {micStatus === "ready" ? "🎤 Ready" : micStatus === "denied" ? "🎤 Denied" : micStatus === "checking" ? "🎤 …" : "🎤 Permission Needed"}
+          </Badge>
+        )}
         <Button variant="ghost" size="icon" onClick={() => setShowDebug(!showDebug)} className="rounded-xl shrink-0">
           <Bug className="h-4 w-4" />
         </Button>
