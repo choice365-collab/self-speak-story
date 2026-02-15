@@ -39,13 +39,38 @@ serve(async (req) => {
       });
     }
 
+    // Handle PUT for updating existing student (PIN change)
+    if (req.method === "PUT") {
+      const { user_id, pin, student_id } = await req.json();
+      if (!user_id || !pin || pin.length !== 4) {
+        return new Response(JSON.stringify({ error: "user_id and 4-digit pin required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const newPassword = `student_${student_id}_${pin}`;
+      const { error: updateError } = await supabase.auth.admin.updateUserById(user_id, {
+        password: newPassword,
+        user_metadata: { pin },
+      });
+
+      if (updateError) {
+        return new Response(JSON.stringify({ error: updateError.message }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { role, login_id, pin, password, display_name, daily_quota_minutes, difficulty_level, speech_speed } = await req.json();
 
     if (role === "student") {
       const email = `student_${login_id}@speakbyyourself.app`;
       const genPassword = `student_${login_id}_${pin}`;
 
-      // Create auth user
       const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
         email,
         password: genPassword,
@@ -59,7 +84,6 @@ serve(async (req) => {
         });
       }
 
-      // Create profile
       await supabase.from("profiles").insert({
         id: newUser.user.id,
         role: "student",
@@ -70,13 +94,12 @@ serve(async (req) => {
         speech_speed: speech_speed || "medium",
       });
 
-      // Create user_role
       await supabase.from("user_roles").insert({
         user_id: newUser.user.id,
         role: "student",
       });
 
-      // Auto-assign all active verbs to this new student with task_no = verb_no
+      // Auto-assign all active verbs
       const { data: allVerbs } = await supabase
         .from("verbs")
         .select("id, verb_no")

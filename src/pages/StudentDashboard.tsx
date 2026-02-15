@@ -15,6 +15,8 @@ type Assignment = {
   verb_id: string;
   task_no: number;
   is_enabled: boolean;
+  completed_count: number;
+  last_completed_score: number | null;
   verbs: { verb_key: string; base_verb: string; meaning_en: string | null } | null;
 };
 
@@ -23,7 +25,7 @@ export default function StudentDashboard() {
   const navigate = useNavigate();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [dailyUsedSeconds, setDailyUsedSeconds] = useState(0);
-  const [dailyLimitSeconds, setDailyLimitSeconds] = useState(600);
+  const [dailyLimitSeconds, setDailyLimitSeconds] = useState(3600);
   const [loading, setLoading] = useState(true);
   const [goToTask, setGoToTask] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
@@ -46,7 +48,7 @@ export default function StudentDashboard() {
     const [assignRes, usageRes] = await Promise.all([
       supabase
         .from("assignments")
-        .select("id, status, verb_id, task_no, is_enabled, verbs!inner(verb_key, base_verb, meaning_en, is_active)")
+        .select("id, status, verb_id, task_no, is_enabled, completed_count, last_completed_score, verbs!inner(verb_key, base_verb, meaning_en, is_active)")
         .eq("student_id", user.id)
         .eq("is_enabled", true)
         .eq("verbs.is_active", true)
@@ -65,9 +67,8 @@ export default function StudentDashboard() {
       setDailyUsedSeconds(usageRes.data.used_seconds);
       setDailyLimitSeconds(usageRes.data.limit_seconds);
     } else {
-      // No record yet for today - use profile quota
       setDailyUsedSeconds(0);
-      setDailyLimitSeconds((profile?.daily_quota_minutes || 10) * 60);
+      setDailyLimitSeconds((profile?.daily_quota_minutes || 60) * 60);
     }
     setLoading(false);
   };
@@ -194,6 +195,12 @@ export default function StudentDashboard() {
                       <div>
                         <h3 className="text-xl font-bold capitalize">{a.verbs?.base_verb || "Unknown"}</h3>
                         <p className="text-sm text-muted-foreground">{a.verbs?.meaning_en}</p>
+                        {a.completed_count > 0 && (
+                          <p className="text-xs font-semibold text-secondary">
+                            Completed x{a.completed_count}
+                            {a.last_completed_score != null ? ` · Last score: ${a.last_completed_score}` : ""}
+                          </p>
+                        )}
                       </div>
                     </div>
                     <Badge variant={config.variant} className="text-sm px-3 py-1 rounded-full">
@@ -201,15 +208,13 @@ export default function StudentDashboard() {
                       {config.label}
                     </Badge>
                   </div>
-                  {a.status !== "completed" && (
-                    <Button
-                      onClick={() => navigate(`/practice/${a.id}`)}
-                      disabled={isBlocked}
-                      className="w-full mt-3 h-14 text-lg font-bold rounded-xl kid-shadow"
-                    >
-                      {isBlocked ? "⛔ Daily Limit Reached" : a.status === "in_progress" ? "Continue ▶️" : "Start Practice 🎤"}
-                    </Button>
-                  )}
+                  <Button
+                    onClick={() => navigate(`/practice/${a.id}`)}
+                    disabled={isBlocked}
+                    className="w-full mt-3 h-14 text-lg font-bold rounded-xl kid-shadow"
+                  >
+                    {isBlocked ? "⛔ Daily Limit Reached" : a.completed_count > 0 ? "Practice Again 🔄" : a.status === "in_progress" ? "Continue ▶️" : "Start Practice 🎤"}
+                  </Button>
                 </CardContent>
               </Card>
             );
