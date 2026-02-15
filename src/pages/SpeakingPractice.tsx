@@ -31,7 +31,7 @@ type TranscriptEntry = {
   timestamp: number;
 };
 
-function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
+function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string, koreanHintMode: boolean): string {
   const situations = [verb.situation_1, verb.situation_2, verb.situation_3, verb.situation_4].filter(Boolean);
   const shortExamples = [verb.example_short_1, verb.example_short_2, verb.example_short_3].filter(Boolean);
   const longExamples = [verb.example_long_1, verb.example_long_2, verb.example_long_3].filter(Boolean);
@@ -107,7 +107,14 @@ IMPORTANT RULES:
 - Speak slowly and clearly
 - Always bring the conversation back to practicing "${verb.base_verb}"
 - Do NOT switch to Korean. Always respond in English.
-- When giving scores, say "Score: [number]" clearly so it can be parsed.`;
+- When giving scores, say "Score: [number]" clearly so it can be parsed.${koreanHintMode ? `
+
+KOREAN HINT MODE (TEXT ONLY):
+- After EACH example sentence or corrected model sentence you give, add a Korean translation line in this exact format:
+  [KO: 한국어 번역]
+- Keep the Korean short and literal (one simple sentence).
+- NEVER speak Korean out loud. The Korean text is for on-screen display only.
+- Example: "I ran into my old friend yesterday." followed by "[KO: 나는 어제 오래된 친구를 우연히 만났어요.]"` : ""}`;
 }
 
 export default function SpeakingPractice() {
@@ -221,7 +228,7 @@ export default function SpeakingPractice() {
     setError(null);
 
     try {
-      const instructions = buildSystemInstructions(verbData, profile?.difficulty_level || "medium", profile?.speech_speed || "medium");
+      const instructions = buildSystemInstructions(verbData, profile?.difficulty_level || "medium", profile?.speech_speed || "medium", profile?.korean_hint_mode ?? false);
 
       const tokenRes = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/realtime-token`,
@@ -499,16 +506,31 @@ export default function SpeakingPractice() {
         )}
 
         {/* Transcripts */}
-        {transcripts.map((t, i) => (
+        {transcripts.map((t, i) => {
+          // Parse Korean hints from assistant messages
+          let mainText = t.text;
+          let koreanHint: string | null = null;
+          if (t.role === "assistant") {
+            const koMatch = t.text.match(/\[KO:\s*(.+?)\]/);
+            if (koMatch) {
+              koreanHint = koMatch[1];
+              mainText = t.text.replace(/\[KO:\s*.+?\]/g, "").trim();
+            }
+          }
+          return (
           <div key={i} className={`flex ${t.role === "user" ? "justify-end" : "justify-start"}`}>
             <Card className={`max-w-[85%] rounded-2xl ${t.role === "user" ? "bg-primary text-primary-foreground" : "kid-shadow"}`}>
               <CardContent className="pt-3 pb-3 px-4">
                 <p className="text-sm font-semibold mb-1">{t.role === "user" ? "🎤 You" : "🤖 Teacher"}</p>
-                <p className="text-base whitespace-pre-wrap">{t.text}</p>
+                <p className="text-base whitespace-pre-wrap">{mainText}</p>
+                {koreanHint && (
+                  <p className="text-sm text-muted-foreground mt-1 border-t pt-1">🇰🇷 {koreanHint}</p>
+                )}
               </CardContent>
             </Card>
           </div>
-        ))}
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
 
