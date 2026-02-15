@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { ArrowLeft, Mic, MicOff, PhoneOff, CheckCircle } from "lucide-react";
+import { formatVerbKey } from "@/lib/formatVerbKey";
 
 type VerbData = {
   verb_key: string;
@@ -460,8 +461,7 @@ export default function SpeakingPractice() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-xl font-black capitalize">🗣️ {verbData.base_verb}</h1>
-          <p className="text-sm text-muted-foreground">{verbData.meaning_en}</p>
+          <h1 className="text-xl font-black">🗣️ {verbData.verb_key ? formatVerbKey(verbData.verb_key) : verbData.base_verb}</h1>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <Badge
