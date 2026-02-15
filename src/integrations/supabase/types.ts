@@ -302,65 +302,62 @@ export type Database = {
       }
       verbs: {
         Row: {
+          anchor_long_1: string | null
+          anchor_long_2: string | null
+          anchor_long_3: string | null
+          anchor_short_1: string | null
+          anchor_short_2: string | null
+          anchor_short_3: string | null
           base_verb: string
           created_at: string
           created_by: string | null
-          example_long_1: string | null
-          example_long_2: string | null
-          example_long_3: string | null
-          example_short_1: string | null
-          example_short_2: string | null
-          example_short_3: string | null
           id: string
           is_active: boolean
           meaning_en: string | null
-          situation_1: string | null
-          situation_2: string | null
-          situation_3: string | null
-          situation_4: string | null
-          situation_5: string | null
+          situation_seed_1: string | null
+          situation_seed_2: string | null
+          situation_seed_3: string | null
+          situation_seed_4: string | null
           verb_key: string
           verb_no: number
         }
         Insert: {
+          anchor_long_1?: string | null
+          anchor_long_2?: string | null
+          anchor_long_3?: string | null
+          anchor_short_1?: string | null
+          anchor_short_2?: string | null
+          anchor_short_3?: string | null
           base_verb: string
           created_at?: string
           created_by?: string | null
-          example_long_1?: string | null
-          example_long_2?: string | null
-          example_long_3?: string | null
-          example_short_1?: string | null
-          example_short_2?: string | null
-          example_short_3?: string | null
           id?: string
           is_active?: boolean
           meaning_en?: string | null
-          situation_1?: string | null
-          situation_2?: string | null
-          situation_3?: string | null
-          situation_4?: string | null
-          situation_5?: string | null
+          situation_seed_1?: string | null
+          situation_seed_2?: string | null
+          situation_seed_3?: string | null
+          situation_seed_4?: string | null
           verb_key: string
           verb_no: number
         }
         Update: {
+          anchor_long_1?: string | null
+          anchor_long_2?: string | null
+          anchor_long_3?: string | null
+          anchor_short_1?: string | null
+          anchor_short_2?: string | null
+          anchor_short_3?: string | null
           base_verb?: string
           created_at?: string
           created_by?: string | null
-          example_long_1?: string | null
-          example_long_2?: string | null
-          example_long_3?: string | null
-          example_short_1?: string | null
-          example_short_2?: string | null
-          example_short_3?: string | null
           id?: string
           is_active?: boolean
           meaning_en?: string | null
-          situation_1?: string | null
-          situation_2?: string | null
-          situation_3?: string | null
-          situation_4?: string | null
-          situation_5?: string | null
+          situation_seed_1?: string | null
+          situation_seed_2?: string | null
+          situation_seed_3?: string | null
+          situation_seed_4?: string | null
           verb_key?: string
           verb_no?: number
         }

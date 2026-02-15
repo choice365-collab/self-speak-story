@@ -12,17 +12,16 @@ type VerbData = {
   verb_key: string;
   base_verb: string;
   meaning_en: string | null;
-  example_short_1: string | null;
-  example_short_2: string | null;
-  example_short_3: string | null;
-  example_long_1: string | null;
-  example_long_2: string | null;
-  example_long_3: string | null;
-  situation_1: string | null;
-  situation_2: string | null;
-  situation_3: string | null;
-  situation_4: string | null;
-  situation_5: string | null;
+  anchor_short_1: string | null;
+  anchor_short_2: string | null;
+  anchor_short_3: string | null;
+  anchor_long_1: string | null;
+  anchor_long_2: string | null;
+  anchor_long_3: string | null;
+  situation_seed_1: string | null;
+  situation_seed_2: string | null;
+  situation_seed_3: string | null;
+  situation_seed_4: string | null;
 };
 
 type TranscriptEntry = {
@@ -32,9 +31,9 @@ type TranscriptEntry = {
 };
 
 function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string, koreanHintMode: boolean): string {
-  const situations = [verb.situation_1, verb.situation_2, verb.situation_3, verb.situation_4].filter(Boolean);
-  const shortExamples = [verb.example_short_1, verb.example_short_2, verb.example_short_3].filter(Boolean);
-  const longExamples = [verb.example_long_1, verb.example_long_2, verb.example_long_3].filter(Boolean);
+  const situations = [verb.situation_seed_1, verb.situation_seed_2, verb.situation_seed_3, verb.situation_seed_4].filter(Boolean);
+  const shortExamples = [verb.anchor_short_1, verb.anchor_short_2, verb.anchor_short_3].filter(Boolean);
+  const longExamples = [verb.anchor_long_1, verb.anchor_long_2, verb.anchor_long_3].filter(Boolean);
   const allExamples = [...shortExamples, ...longExamples];
 
   const difficultyGuides: Record<string, string> = {

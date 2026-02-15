@@ -39,18 +39,20 @@ Meaning: ${verb_data.meaning_en}
 Your task:
 1. Briefly explain what "${verb_data.verb}" means in simple English
 2. Give these example sentences one by one:
-   - ${verb_data.example_short_1 || ""}
-   - ${verb_data.example_short_2 || ""}
-   - ${verb_data.example_short_3 || ""}
-3. Then give a longer example:
-   - ${verb_data.example_long_1 || ""}
+   - ${verb_data.anchor_short_1 || ""}
+   - ${verb_data.anchor_short_2 || ""}
+   - ${verb_data.anchor_short_3 || ""}
+3. Then give longer examples:
+   - ${verb_data.anchor_long_1 || ""}
+   - ${verb_data.anchor_long_2 || ""}
+   - ${verb_data.anchor_long_3 || ""}
 
 Keep it short, friendly, and encouraging. Use simple words. Add emoji occasionally.`;
 
     } else if (action === "situation") {
       const situations = [
-        verb_data.situation_1, verb_data.situation_2, verb_data.situation_3,
-        verb_data.situation_4, verb_data.situation_5
+        verb_data.situation_seed_1, verb_data.situation_seed_2, verb_data.situation_seed_3,
+        verb_data.situation_seed_4
       ].filter(Boolean);
       const randomSituation = situations[Math.floor(Math.random() * situations.length)] || "Tell me about your day";
 
