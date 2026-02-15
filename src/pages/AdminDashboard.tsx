@@ -28,6 +28,7 @@ type Verb = {
   verb_key: string;
   base_verb: string;
   meaning_en: string | null;
+  anchor_short_1: string | null;
   is_active: boolean;
   verb_no: number;
   display_no: number | null;
@@ -192,7 +193,7 @@ export default function AdminDashboard() {
 
     const [studentsRes, verbsRes, assignmentsRes, creditRes, usageRes] = await Promise.all([
       supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed, korean_hint_mode").eq("role", "student"),
-      supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, is_active, verb_no, display_no").order("verb_no", { ascending: true }),
+      supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, anchor_short_1, is_active, verb_no, display_no").order("verb_no", { ascending: true }),
       supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, completed_count, last_completed_score, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
       supabase.from("credit_balance").select("balance_usd").limit(1).maybeSingle(),
       supabase.from("daily_usage").select("student_id, used_seconds").eq("date", today),
@@ -1031,7 +1032,7 @@ export default function AdminDashboard() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <Badge variant="outline" className="rounded-full text-xs font-black px-1.5 py-0 shrink-0">#{v.display_no ?? v.verb_no}</Badge>
-                            <span className={`font-bold capitalize ${!v.is_active ? "text-muted-foreground" : ""}`}>{v.base_verb}</span>
+                            <span className={`font-bold ${!v.is_active ? "text-muted-foreground" : ""}`}>{v.verb_key}</span>
                             {v.is_active ? (
                               <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px] px-1.5 py-0">
                                 <CheckCircle2 className="h-3 w-3 mr-0.5" /> Active
@@ -1043,6 +1044,9 @@ export default function AdminDashboard() {
                             )}
                           </div>
                           <span className={`text-sm ${!v.is_active ? "text-muted-foreground/60" : "text-muted-foreground"}`}>{v.meaning_en}</span>
+                          {v.anchor_short_1 && (
+                            <span className={`text-xs ${!v.is_active ? "text-muted-foreground/40" : "text-muted-foreground/70"}`}>{v.anchor_short_1}</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <Switch
