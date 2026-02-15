@@ -330,7 +330,7 @@ export default function AdminDashboard() {
   const downloadVerbLibrary = async () => {
     const { data, error } = await supabase
       .from("verbs")
-      .select("verb_no, verb_key, base_verb, meaning_en, is_active, example_short_1, example_short_2, example_short_3, example_long_1, example_long_2, example_long_3, situation_1, situation_2, situation_3, situation_4, situation_5")
+      .select("verb_no, verb_key, base_verb, meaning_en, is_active, anchor_short_1, anchor_short_2, anchor_short_3, anchor_long_1, anchor_long_2, anchor_long_3, situation_seed_1, situation_seed_2, situation_seed_3, situation_seed_4")
       .order("verb_no", { ascending: true });
     if (error || !data) {
       toast.error(error?.message || "Failed to load verbs");
@@ -360,17 +360,16 @@ export default function AdminDashboard() {
           verb_key: row.verb_key || "",
           base_verb: row.base_verb || "",
           meaning_en: row.meaning_en || null,
-          example_short_1: row.example_short_1 || null,
-          example_short_2: row.example_short_2 || null,
-          example_short_3: row.example_short_3 || null,
-          example_long_1: row.example_long_1 || null,
-          example_long_2: row.example_long_2 || null,
-          example_long_3: row.example_long_3 || null,
-          situation_1: row.situation_1 || null,
-          situation_2: row.situation_2 || null,
-          situation_3: row.situation_3 || null,
-          situation_4: row.situation_4 || null,
-          situation_5: row.situation_5 || null,
+          anchor_short_1: row.anchor_short_1 || null,
+          anchor_short_2: row.anchor_short_2 || null,
+          anchor_short_3: row.anchor_short_3 || null,
+          anchor_long_1: row.anchor_long_1 || null,
+          anchor_long_2: row.anchor_long_2 || null,
+          anchor_long_3: row.anchor_long_3 || null,
+          situation_seed_1: row.situation_seed_1 || null,
+          situation_seed_2: row.situation_seed_2 || null,
+          situation_seed_3: row.situation_seed_3 || null,
+          situation_seed_4: row.situation_seed_4 || null,
           created_by: user?.id,
         };
         if (hasIsActiveColumn) {
