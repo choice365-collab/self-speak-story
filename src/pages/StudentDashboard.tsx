@@ -17,7 +17,7 @@ type Assignment = {
   is_enabled: boolean;
   completed_count: number;
   last_completed_score: number | null;
-  verbs: { verb_key: string; base_verb: string; meaning_en: string | null } | null;
+  verbs: { verb_key: string; base_verb: string; meaning_en: string | null; display_no: number | null } | null;
 };
 
 export default function StudentDashboard() {
@@ -48,7 +48,7 @@ export default function StudentDashboard() {
     const [assignRes, usageRes] = await Promise.all([
       supabase
         .from("assignments")
-        .select("id, status, verb_id, task_no, is_enabled, completed_count, last_completed_score, verbs!inner(verb_key, base_verb, meaning_en, is_active)")
+        .select("id, status, verb_id, task_no, is_enabled, completed_count, last_completed_score, verbs!inner(verb_key, base_verb, meaning_en, display_no, is_active)")
         .eq("student_id", user.id)
         .eq("is_enabled", true)
         .eq("verbs.is_active", true)
@@ -61,7 +61,14 @@ export default function StudentDashboard() {
         .maybeSingle(),
     ]);
 
-    if (assignRes.data) setAssignments(assignRes.data as any);
+    if (assignRes.data) {
+      const sorted = (assignRes.data as any[]).sort((a: Assignment, b: Assignment) => {
+        const aNo = a.verbs?.display_no ?? a.task_no;
+        const bNo = b.verbs?.display_no ?? b.task_no;
+        return aNo - bNo;
+      });
+      setAssignments(sorted);
+    }
     
     if (usageRes.data) {
       setDailyUsedSeconds(usageRes.data.used_seconds);
@@ -173,8 +180,9 @@ export default function StudentDashboard() {
             const from = parseInt(filterFrom);
             const to = parseInt(filterTo);
             const filtered = assignments.filter(a => {
-              if (!isNaN(from) && a.task_no < from) return false;
-              if (!isNaN(to) && a.task_no > to) return false;
+              const displayNum = a.verbs?.display_no ?? a.task_no;
+              if (!isNaN(from) && displayNum < from) return false;
+              if (!isNaN(to) && displayNum > to) return false;
               return true;
             });
             return filtered.length === 0 ? (
@@ -187,11 +195,11 @@ export default function StudentDashboard() {
             const config = statusConfig[a.status as keyof typeof statusConfig] || statusConfig.not_started;
             const StatusIcon = config.icon;
             return (
-              <Card key={a.id} id={`task-${a.task_no}`} className="rounded-2xl kid-shadow hover:scale-[1.01] transition-transform">
+              <Card key={a.id} id={`task-${a.verbs?.display_no ?? a.task_no}`} className="rounded-2xl kid-shadow hover:scale-[1.01] transition-transform">
                 <CardContent className="pt-5 pb-4">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3">
-                      <div className="text-lg font-black text-primary">#{a.task_no}</div>
+                      <div className="text-lg font-black text-primary">#{a.verbs?.display_no ?? a.task_no}</div>
                       <div>
                         <h3 className="text-xl font-bold capitalize">{a.verbs?.base_verb || "Unknown"}</h3>
                         <p className="text-sm text-muted-foreground">{a.verbs?.meaning_en}</p>
