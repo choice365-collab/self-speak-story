@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { ArrowLeft, Mic, MicOff, PhoneOff, CheckCircle, History } from "lucide-react";
 import { formatVerbKey } from "@/lib/formatVerbKey";
-import { evaluateAttempt, type CorrectionEntry, type FeedbackLevel } from "@/lib/evaluateAttempt";
+import { type CorrectionEntry, type FeedbackLevel } from "@/lib/evaluateAttempt";
 
 type VerbData = {
   verb_key: string;
@@ -31,6 +31,10 @@ type TranscriptEntry = {
   text: string;
   timestamp: number;
 };
+
+function containsKorean(text: string): boolean {
+  return /[가-힣]/.test(text);
+}
 
 function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string, _koreanHintMode: boolean): string {
   const situations = [verb.situation_seed_1, verb.situation_seed_2, verb.situation_seed_3, verb.situation_seed_4].filter(Boolean);
@@ -60,14 +64,14 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
 ===== CRITICAL LANGUAGE RULE =====
 - Korean is allowed ONLY ONCE: when you first introduce a new example sentence, explain the FULL sentence meaning in Korean.
 - After that single Korean explanation, ALL interaction must be 100% in English.
-- Korean must NEVER be used in feedback, correction, retry prompts, scoring, praise, or any other interaction.
+- Korean must NEVER be used in feedback, correction, retry prompts, praise, or any other interaction.
 - The Korean explanation must cover the ENTIRE sentence meaning, not just the verb.
 
 ===== GENERAL RULES =====
 - Be patient, encouraging, and clear.
 - Keep each response SHORT (2-3 sentences max).
 - Do NOT praise silence or irrelevant answers.
-- Only say "Great job" or similar when the student actually attempts the target sentence correctly.
+- Only say "GREAT!" or "GOOD!" when the student actually spoke in English AND the attempt is acceptable.
 
 DIFFICULTY LEVEL: ${difficultyLevel.toUpperCase()}
 ${difficultyGuide}
@@ -84,6 +88,7 @@ When the lesson starts, speak IMMEDIATELY with this structure:
 2. Say the first example sentence in English.
 3. Then explain the FULL sentence meaning in Korean (e.g. "이 문장은 '...' 라는 뜻이야.")
 4. After this, switch to English-only mode permanently for this sentence.
+5. Ask the student to repeat the sentence.
 
 ===== LESSON STRUCTURE (STRICT ORDER) =====
 
@@ -95,7 +100,7 @@ For EACH example sentence:
   a) Say the sentence clearly in English.
   b) Explain the full sentence meaning in Korean ONCE (this is the ONLY time Korean is allowed).
   c) Ask the student to repeat in English: "Now repeat after me: [sentence]"
-  d) If incorrect, use the CORRECTION flow (English only).
+  d) If incorrect, say "TRY AGAIN." and repeat the correct sentence once.
   e) Require 2–3 correct repetitions before moving on.
 
 --- Step B: Situation Practice ---
@@ -105,7 +110,7 @@ ${situationList}
 For EACH situation:
   a) Describe the situation in English and ask the student to create a sentence using "${verb.base_verb}".
   b) If the student is silent: wait 3 seconds, then say "I didn't hear anything. Please try again." and repeat the target sentence.
-  c) Use the CORRECTION flow for wrong answers (English only).
+  c) If incorrect: say "TRY AGAIN." and repeat the correct sentence once.
   d) Ask for 2–3 correct repetitions.
   e) NO Korean allowed in situation practice.
 
@@ -116,29 +121,27 @@ If the student is silent for about 3 seconds:
   - Wait for the student to respond.
   - Maximum 2 re-prompts per turn before simplifying and moving on.
 
+===== KOREAN INPUT HANDLING =====
+If the student speaks Korean:
+  - Say: "Please speak in English. Let's try again."
+  - Repeat the target sentence once.
+  - Do NOT respond to the Korean content. Do NOT translate it. Do NOT praise it.
+
 ===== CORRECTION FLOW (ENGLISH ONLY) =====
-If the student's sentence is incorrect, respond with this EXACT structure:
-  "CORRECTION: [correct sentence]"
-  "You said: [student sentence]"
-  "Correct form: [correct sentence]"
-  "Please repeat the correct sentence."
+If the student's sentence is incorrect, respond with:
+  "TRY AGAIN."
+  Then repeat the correct target sentence once.
 - NEVER use Korean in corrections.
 
-===== OFF-TOPIC HANDLING =====
-If the student says something irrelevant or off-topic:
-  - Say: "Please repeat the example sentence."
-  - Repeat the correct sentence once.
-  - Do NOT praise or acknowledge the off-topic response.
-
-===== THREE-LEVEL SCORING =====
-After each student attempt, evaluate and respond with exactly one of:
-  - "Great!" → high similarity, correct structure (say "Score: Great!")
-  - "Not Bad" → minor mistakes but meaning is close (say "Score: Not Bad")
-  - "Try Again" → low similarity, silence, or off-topic (say "Score: Try Again")
-Only use English labels. No Korean. No numeric scores.
+===== FEEDBACK RULES =====
+Use ONLY these feedback words:
+  - "GREAT!" or "GOOD!" → student spoke in English AND the attempt is correct/acceptable
+  - "TRY AGAIN." → incorrect, silent, off-topic, or Korean input
+Do NOT use any numeric score, star rating, percentage, or rubric.
+Do NOT praise silence, off-topic, or Korean input.
 
 ===== BEHAVIOR =====
-- Do NOT overpraise. Only praise genuine attempts.
+- Do NOT overpraise. Only praise genuine correct English attempts.
 - If student struggles repeatedly, simplify the sentence.
 - Keep lesson dynamic and interactive.
 - Do not skip repetition.
@@ -176,7 +179,6 @@ export default function SpeakingPractice() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const totalAudioSecondsRef = useRef(0);
   const sessionStartTimeRef = useRef(Date.now());
-  const scoresRef = useRef<number[]>([]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -256,15 +258,7 @@ export default function SpeakingPractice() {
   const addTranscript = useCallback((role: "user" | "assistant", text: string) => {
     setTranscripts((prev) => [...prev, { role, text, timestamp: Date.now() }]);
 
-    // Parse 3-level scores from AI responses
     if (role === "assistant") {
-      const scoreLevelMatch = text.match(/Score:\s*(Great!|Not Bad|Try Again)/i);
-      if (scoreLevelMatch) {
-        const level = scoreLevelMatch[1] as string;
-        const numericScore = level.toLowerCase().startsWith("great") ? 90 : level.toLowerCase().startsWith("not") ? 60 : 30;
-        scoresRef.current.push(numericScore);
-      }
-
       // Parse corrections from AI and store
       const correctionMatch = text.match(/CORRECTION:\s*(.+)/i);
       const youSaidMatch = text.match(/You said:\s*(.+)/i);
@@ -419,10 +413,6 @@ export default function SpeakingPractice() {
     setIsComplete(true);
     const totalSessionSeconds = Math.floor((Date.now() - sessionStart) / 1000);
 
-    // Calculate average score
-    const scores = scoresRef.current;
-    const avgScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
-
     // Update daily usage
     await updateDailyUsage(totalAudioSecondsRef.current);
 
@@ -435,13 +425,12 @@ export default function SpeakingPractice() {
 
     const newCount = ((currentAssignment as any)?.completed_count || 0) + 1;
 
-    // Mark assignment complete with score
+    // Mark assignment complete
     await supabase.from("assignments")
       .update({
         status: "completed",
         completed_at: new Date().toISOString(),
         completed_count: newCount,
-        ...(avgScore != null ? { last_completed_score: avgScore } : {}),
       })
       .eq("id", assignmentId);
 
@@ -452,19 +441,6 @@ export default function SpeakingPractice() {
         assignment_id: assignmentId,
         duration_seconds: totalSessionSeconds,
       });
-
-      // Save practice logs with scores
-      if (scores.length > 0) {
-        const logs = scores.map((score, i) => ({
-          student_id: user.id,
-          assignment_id: assignmentId,
-          situation_index: i + 1,
-          score,
-          audio_seconds: Math.floor(totalAudioSecondsRef.current / Math.max(scores.length, 1)),
-          result: score >= 50 ? "pass" : "fail",
-        }));
-        await supabase.from("practice_logs").insert(logs);
-      }
     }
 
     setTimeout(() => disconnect(), 2000);
