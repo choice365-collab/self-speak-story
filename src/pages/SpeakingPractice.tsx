@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Mic, MicOff, PhoneOff, CheckCircle } from "lucide-react";
+import { ArrowLeft, Mic, MicOff, PhoneOff, CheckCircle, History } from "lucide-react";
 import { formatVerbKey } from "@/lib/formatVerbKey";
+import { evaluateAttempt, type CorrectionEntry, type FeedbackLevel } from "@/lib/evaluateAttempt";
 
 type VerbData = {
   verb_key: string;
@@ -31,7 +32,7 @@ type TranscriptEntry = {
   timestamp: number;
 };
 
-function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string, koreanHintMode: boolean): string {
+function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string, _koreanHintMode: boolean): string {
   const situations = [verb.situation_seed_1, verb.situation_seed_2, verb.situation_seed_3, verb.situation_seed_4].filter(Boolean);
   const shortExamples = [verb.anchor_short_1, verb.anchor_short_2, verb.anchor_short_3].filter(Boolean);
   const longExamples = [verb.anchor_long_1, verb.anchor_long_2, verb.anchor_long_3].filter(Boolean);
@@ -56,12 +57,17 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
 
   return `You are an English-speaking AI tutor for elementary students.
 
+===== CRITICAL LANGUAGE RULE =====
+- Korean is allowed ONLY ONCE: when you first introduce a new example sentence, explain the FULL sentence meaning in Korean.
+- After that single Korean explanation, ALL interaction must be 100% in English.
+- Korean must NEVER be used in feedback, correction, retry prompts, scoring, praise, or any other interaction.
+- The Korean explanation must cover the ENTIRE sentence meaning, not just the verb.
+
 ===== GENERAL RULES =====
-- Speak in English only.
-- Never speak Korean in audio.
 - Be patient, encouraging, and clear.
-- Speak about 30% slower than normal native speed.
-- Keep sentences natural but not too complex.
+- Keep each response SHORT (2-3 sentences max).
+- Do NOT praise silence or irrelevant answers.
+- Only say "Great job" or similar when the student actually attempts the target sentence correctly.
 
 DIFFICULTY LEVEL: ${difficultyLevel.toUpperCase()}
 ${difficultyGuide}
@@ -72,62 +78,74 @@ ${speedGuide}
 The student is learning the verb: "${verb.base_verb}"
 Meaning: ${verb.meaning_en || ""}
 
+===== AI MUST SPEAK FIRST =====
+When the lesson starts, speak IMMEDIATELY with this structure:
+1. "Today we will practice the verb '${verb.base_verb}'."
+2. Say the first example sentence in English.
+3. Then explain the FULL sentence meaning in Korean (e.g. "이 문장은 '...' 라는 뜻이야.")
+4. After this, switch to English-only mode permanently for this sentence.
+
 ===== LESSON STRUCTURE (STRICT ORDER) =====
 
 --- Step A: Explanation & Repeat Practice ---
-1. Briefly explain the meaning of the verb in simple English.
-2. Use exactly these 6 example sentences from the uploaded data:
+Use exactly these example sentences:
 ${exampleList}
 
 For EACH example sentence:
-  a) Say the sentence clearly.
-  b) Ask the student to repeat.
-  c) If incorrect, correct them gently.
-  d) Require 2–3 correct repetitions before moving on.
+  a) Say the sentence clearly in English.
+  b) Explain the full sentence meaning in Korean ONCE (this is the ONLY time Korean is allowed).
+  c) Ask the student to repeat in English: "Now repeat after me: [sentence]"
+  d) If incorrect, use the CORRECTION flow (English only).
+  e) Require 2–3 correct repetitions before moving on.
 
 --- Step B: Situation Practice ---
-Use these situation seeds to generate 4 speaking situations:
+Use these situation seeds:
 ${situationList}
 
 For EACH situation:
-  a) Describe the situation and ask the student to create a sentence using "${verb.base_verb}".
-  b) If the student is silent: wait 7 seconds, then give a strong hint (almost the full sentence).
-  c) Correct grammar and word order.
+  a) Describe the situation in English and ask the student to create a sentence using "${verb.base_verb}".
+  b) If the student is silent: wait 3 seconds, then say "I didn't hear anything. Please try again." and repeat the target sentence.
+  c) Use the CORRECTION flow for wrong answers (English only).
   d) Ask for 2–3 correct repetitions.
-  e) Do NOT give Korean hints during situation practice.
+  e) NO Korean allowed in situation practice.
 
-===== SCORING =====
-After each situation answer, internally evaluate:
-- Grammar
-- Appropriateness
-- Fluency
-Assign a score from 0–100. Say "Score: [number]" clearly so it can be parsed.
-Use the final average score as the task completion score.
-
-===== SILENCE HANDLING =====
-If the student is silent for about 7 seconds after you ask them to speak:
-  - Give a strong hint: "Here's a hint! Try saying: [almost complete sentence]. Can you fill in the blank?"
-  - If still silent after another 7 seconds: Give the full answer and ask them to repeat: "Let's try this: [full sentence]. Please repeat after me!"
+===== SILENCE HANDLING (3 SECONDS) =====
+If the student is silent for about 3 seconds:
+  - Say: "I didn't hear anything. Please try again."
+  - Repeat the example sentence once.
+  - Wait for the student to respond.
   - Maximum 2 re-prompts per turn before simplifying and moving on.
 
+===== CORRECTION FLOW (ENGLISH ONLY) =====
+If the student's sentence is incorrect, respond with this EXACT structure:
+  "CORRECTION: [correct sentence]"
+  "You said: [student sentence]"
+  "Correct form: [correct sentence]"
+  "Please repeat the correct sentence."
+- NEVER use Korean in corrections.
+
+===== OFF-TOPIC HANDLING =====
+If the student says something irrelevant or off-topic:
+  - Say: "Please repeat the example sentence."
+  - Repeat the correct sentence once.
+  - Do NOT praise or acknowledge the off-topic response.
+
+===== THREE-LEVEL SCORING =====
+After each student attempt, evaluate and respond with exactly one of:
+  - "Great!" → high similarity, correct structure (say "Score: Great!")
+  - "Not Bad" → minor mistakes but meaning is close (say "Score: Not Bad")
+  - "Try Again" → low similarity, silence, or off-topic (say "Score: Try Again")
+Only use English labels. No Korean. No numeric scores.
+
 ===== BEHAVIOR =====
-- Encourage but do not overpraise.
+- Do NOT overpraise. Only praise genuine attempts.
 - If student struggles repeatedly, simplify the sentence.
 - Keep lesson dynamic and interactive.
 - Do not skip repetition.
-- Keep each response SHORT (2-3 sentences max).
 - Always bring the conversation back to practicing "${verb.base_verb}".
 
 ===== COMPLETION =====
-After completing ALL 4 situations successfully, congratulate the student and say exactly "PRACTICE COMPLETE!" at the end.${koreanHintMode ? `
-
-KOREAN HINT MODE (TEXT ONLY — STRICT RULES):
-- Add a Korean translation ONLY in these two cases:
-  1. When you present one of the 6 example sentences in Step A.
-  2. When you provide a corrected model sentence after the student makes an error.
-- Format: [KO: 한국어 번역]
-- Do NOT add Korean for: situation descriptions, follow-up questions, praise, guidance.
-- NEVER speak Korean in audio. Korean is text-only for on-screen display.` : ""}`;
+After completing ALL 4 situations successfully, congratulate the student and say exactly "PRACTICE COMPLETE!" at the end.`;
 }
 
 export default function SpeakingPractice() {
@@ -143,6 +161,13 @@ export default function SpeakingPractice() {
   const [isBlocked, setIsBlocked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionStart] = useState(Date.now());
+  const [correctionHistory, setCorrectionHistory] = useState<CorrectionEntry[]>(() => {
+    try {
+      const stored = localStorage.getItem(`corrections_${assignmentId}`);
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
+  const [showCorrections, setShowCorrections] = useState(false);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
@@ -220,20 +245,40 @@ export default function SpeakingPractice() {
     }
   };
 
+  const addCorrection = useCallback((entry: CorrectionEntry) => {
+    setCorrectionHistory((prev) => {
+      const updated = [...prev, entry];
+      try { localStorage.setItem(`corrections_${assignmentId}`, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  }, [assignmentId]);
+
   const addTranscript = useCallback((role: "user" | "assistant", text: string) => {
     setTranscripts((prev) => [...prev, { role, text, timestamp: Date.now() }]);
 
-    // Parse scores from AI responses
+    // Parse 3-level scores from AI responses
     if (role === "assistant") {
-      const scoreMatch = text.match(/Score:\s*(\d+)/i);
-      if (scoreMatch) {
-        const score = parseInt(scoreMatch[1]);
-        if (score >= 0 && score <= 100) {
-          scoresRef.current.push(score);
-        }
+      const scoreLevelMatch = text.match(/Score:\s*(Great!|Not Bad|Try Again)/i);
+      if (scoreLevelMatch) {
+        const level = scoreLevelMatch[1] as string;
+        const numericScore = level.toLowerCase().startsWith("great") ? 90 : level.toLowerCase().startsWith("not") ? 60 : 30;
+        scoresRef.current.push(numericScore);
+      }
+
+      // Parse corrections from AI and store
+      const correctionMatch = text.match(/CORRECTION:\s*(.+)/i);
+      const youSaidMatch = text.match(/You said:\s*(.+)/i);
+      if (correctionMatch && youSaidMatch) {
+        addCorrection({
+          timestamp: Date.now(),
+          targetSentence: correctionMatch[1].trim(),
+          studentTranscript: youSaidMatch[1].trim(),
+          correctedSentence: correctionMatch[1].trim(),
+          feedbackLevel: "Try Again",
+        });
       }
     }
-  }, []);
+  }, [addCorrection]);
 
   const connect = useCallback(async () => {
     if (!verbData) return;
@@ -254,7 +299,7 @@ export default function SpeakingPractice() {
           body: JSON.stringify({
             voice: "alloy",
             instructions,
-            turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 700 },
+            turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 3000 },
             input_audio_transcription: { model: "gpt-4o-mini-transcribe" },
             speed: profile?.speech_speed || "medium",
           }),
@@ -464,6 +509,11 @@ export default function SpeakingPractice() {
           <h1 className="text-xl font-black">🗣️ {verbData.verb_key ? formatVerbKey(verbData.verb_key, verbData.meaning_en) : verbData.base_verb}</h1>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {correctionHistory.length > 0 && (
+            <Button variant="ghost" size="icon" onClick={() => setShowCorrections(!showCorrections)} className="rounded-xl shrink-0">
+              <History className="h-4 w-4" />
+            </Button>
+          )}
           <Badge
             variant="outline"
             className={`rounded-full text-xs ${
@@ -497,6 +547,24 @@ export default function SpeakingPractice() {
               )}
             </div>
           </div>
+        )}
+
+        {/* Correction History Panel */}
+        {showCorrections && correctionHistory.length > 0 && (
+          <Card className="rounded-2xl border-destructive/30">
+            <CardContent className="pt-3 pb-3 px-4">
+              <p className="text-sm font-bold mb-2">📝 Correction History ({correctionHistory.length})</p>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {correctionHistory.map((c, i) => (
+                  <div key={i} className="text-xs border-b border-border pb-2 last:border-0">
+                    <p className="text-destructive font-semibold">✗ You said: {c.studentTranscript}</p>
+                    <p className="text-secondary font-semibold">✓ Correct: {c.correctedSentence}</p>
+                    <Badge variant="outline" className="text-[10px] mt-1">{c.feedbackLevel}</Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {connectionState === "idle" && !isComplete && (
