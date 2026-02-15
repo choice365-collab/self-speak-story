@@ -109,12 +109,14 @@ IMPORTANT RULES:
 - Do NOT switch to Korean. Always respond in English.
 - When giving scores, say "Score: [number]" clearly so it can be parsed.${koreanHintMode ? `
 
-KOREAN HINT MODE (TEXT ONLY):
-- After EACH example sentence or corrected model sentence you give, add a Korean translation line in this exact format:
-  [KO: 한국어 번역]
-- Keep the Korean short and literal (one simple sentence).
-- NEVER speak Korean out loud. The Korean text is for on-screen display only.
-- Example: "I ran into my old friend yesterday." followed by "[KO: 나는 어제 오래된 친구를 우연히 만났어요.]"` : ""}`;
+KOREAN HINT MODE (TEXT ONLY — STRICT RULES):
+- Add a Korean translation ONLY in these two cases:
+  1. When you present one of the 6 example sentences in Step A (the anchor examples).
+  2. When you provide a corrected model sentence after the student makes an error.
+- Use this exact format on a new line after the English sentence: [KO: 한국어 번역]
+- Do NOT add Korean hints for: situation descriptions, follow-up questions, praise, guidance, or student-generated sentences.
+- Keep Korean short, literal, one simple sentence. No grammar explanations.
+- NEVER speak Korean in audio. Korean is text-only for on-screen display.` : ""}`;
 }
 
 export default function SpeakingPractice() {
