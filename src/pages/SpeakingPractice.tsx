@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Mic, MicOff, PhoneOff, CheckCircle, History } from "lucide-react";
 import { formatVerbKey } from "@/lib/formatVerbKey";
 import { type CorrectionEntry, type FeedbackLevel } from "@/lib/evaluateAttempt";
+import SilenceTimer from "@/components/SilenceTimer";
 
 type VerbData = {
   verb_key: string;
@@ -160,6 +161,7 @@ export default function SpeakingPractice() {
   const [connectionState, setConnectionState] = useState<"idle" | "connecting" | "connected" | "error">("idle");
   const [isMuted, setIsMuted] = useState(false);
   const [aiSpeaking, setAiSpeaking] = useState(false);
+  const [speechDetected, setSpeechDetected] = useState(false);
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [isComplete, setIsComplete] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
@@ -189,6 +191,10 @@ export default function SpeakingPractice() {
     if (track) {
       track.enabled = enabled;
       setIsMuted(!enabled);
+      if (enabled) {
+        // Reset speech detection when mic turns on
+        setSpeechDetected(false);
+      }
     }
   }, []);
 
@@ -348,9 +354,15 @@ export default function SpeakingPractice() {
         try {
           const event = JSON.parse(e.data);
 
-          // AI starts speaking → mic OFF
+          // Speech detected → cancel silence timer
+          if (event.type === "input_audio_buffer.speech_started") {
+            setSpeechDetected(true);
+          }
+
+          // AI starts speaking → mic OFF, reset speech detection
           if (event.type === "response.audio.delta") {
             setAiSpeaking(true);
+            setSpeechDetected(false);
             setMicEnabled(false);
           }
 
@@ -635,6 +647,13 @@ export default function SpeakingPractice() {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Silence Timer */}
+      {isConnected && !isMuted && !aiSpeaking && !speechDetected && (
+        <div className="flex justify-center pb-2">
+          <SilenceTimer active durationMs={3000} />
+        </div>
+      )}
+
       {/* Controls */}
       <div className="border-t p-4">
         {isComplete ? (
@@ -651,7 +670,7 @@ export default function SpeakingPractice() {
               onClick={toggleMute}
               variant={isMuted ? "destructive" : "outline"}
               className="h-16 w-16 rounded-2xl kid-shadow"
-              disabled={!isConnected}
+              disabled={!isConnected || aiSpeaking}
             >
               {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
             </Button>
