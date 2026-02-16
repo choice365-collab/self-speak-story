@@ -220,6 +220,11 @@ export function useRealtimeWebRTC() {
 
           if (type === "input_audio_buffer.speech_stopped") {
             perf("end_of_speech");
+            // Immediately request AI response so there's minimal silence
+            const respDc = dcRef.current;
+            if (respDc && respDc.readyState === "open") {
+              respDc.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio", "text"] } }));
+            }
           }
 
           // AI audio chunk
