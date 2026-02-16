@@ -9,144 +9,110 @@ import { useRealtimeWebRTC, TranscriptEntry } from "@/hooks/useRealtimeWebRTC";
 export default function VoiceChat() {
   const navigate = useNavigate();
   const [showDebug, setShowDebug] = useState(false);
+  const [userMuted, setUserMuted] = useState(false);
+  const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
   const {
-    state,
+    status,
     error,
-    isMuted,
-    micStatus,
-    transcripts,
-    partialTranscript,
-    debugLog,
+    isAiSpeaking,
     connect,
     disconnect,
-    toggleMute,
+    setMicEnabled,
+    sendUserText,
   } = useRealtimeWebRTC();
 
-  const isConnected = state === "connected";
-  const isConnecting = state === "connecting";
-  const isIdle = state === "disconnected" || state === "error";
+  const isConnected = status === "connected";
+  const isIdle = status === "idle" || status === "error";
 
-  // Auto-scroll transcripts
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [transcripts, partialTranscript]);
+  }, [transcripts]);
+
+  const handleStart = () => {
+    connect({
+      onAiTranscript: (text) => setTranscripts((prev) => [...prev, { role: "assistant", text, timestamp: Date.now() }]),
+      onUserTranscript: (text) => setTranscripts((prev) => [...prev, { role: "user", text, timestamp: Date.now() }]),
+      onReady: (send) => send("Say hello and introduce yourself as an English conversation partner."),
+      onAiSpeakingEnd: () => {
+        if (!userMuted) setMicEnabled(true);
+      },
+    });
+  };
+
+  const toggleMute = () => {
+    const next = !userMuted;
+    setUserMuted(next);
+    setMicEnabled(!next);
+  };
 
   const statusColor = {
-    disconnected: "bg-muted text-muted-foreground",
+    idle: "bg-muted text-muted-foreground",
     connecting: "bg-accent/20 text-accent",
     connected: "bg-secondary/20 text-secondary",
     error: "bg-destructive/20 text-destructive",
-  }[state];
+  }[status];
 
   return (
     <div className="min-h-screen bg-background flex flex-col max-w-2xl mx-auto">
-      {/* Header */}
       <header className="flex items-center gap-3 px-4 py-3 border-b border-border">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/")} className="rounded-xl shrink-0">
+        <Button variant="ghost" size="icon" onClick={() => { disconnect(); navigate("/"); }} className="rounded-xl shrink-0">
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-black truncate">🎙️ Voice Chat</h1>
         </div>
         <Badge className={`rounded-full text-xs font-bold px-3 ${statusColor}`}>
-          {state === "disconnected" ? "Ready" : state.charAt(0).toUpperCase() + state.slice(1)}
+          {status === "idle" ? "Ready" : status.charAt(0).toUpperCase() + status.slice(1)}
         </Badge>
-        {!isConnected && (
-          <Badge variant="outline" className={`rounded-full text-xs px-3 ${micStatus === "ready" ? "border-secondary text-secondary" : micStatus === "denied" ? "border-destructive text-destructive" : "border-muted-foreground text-muted-foreground"}`}>
-            {micStatus === "ready" ? "🎤 Ready" : micStatus === "denied" ? "🎤 Denied" : micStatus === "checking" ? "🎤 …" : "🎤 Permission Needed"}
-          </Badge>
-        )}
-        <Button variant="ghost" size="icon" onClick={() => setShowDebug(!showDebug)} className="rounded-xl shrink-0">
-          <Bug className="h-4 w-4" />
-        </Button>
       </header>
 
-      {/* Transcript area */}
       <ScrollArea className="flex-1 px-4 py-4">
         <div className="space-y-3 min-h-[200px]">
-          {transcripts.length === 0 && !partialTranscript && (
+          {transcripts.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <span className="text-6xl mb-4">{isConnected ? "🗣️" : "🎙️"}</span>
               <p className="text-lg font-bold text-foreground">
                 {isConnected ? "Listening… speak naturally!" : "Tap Start to begin"}
               </p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {isConnected ? "Your words will appear here in real-time" : "Have a real conversation with AI in English"}
-              </p>
             </div>
           )}
-
           {transcripts.map((entry, i) => (
             <TranscriptBubble key={i} entry={entry} />
           ))}
-
-          {partialTranscript && (
-            <div className="flex justify-end">
-              <div className="max-w-[80%] rounded-2xl rounded-br-md px-4 py-2.5 bg-primary/10 text-foreground text-sm font-semibold animate-pulse">
-                {partialTranscript}…
-              </div>
-            </div>
-          )}
-
           <div ref={transcriptEndRef} />
         </div>
       </ScrollArea>
 
-      {/* Error */}
       {error && (
         <div className="px-4 pb-2">
-          <div className="rounded-xl bg-destructive/10 text-destructive text-sm font-semibold px-4 py-2 text-center">
-            {error}
-          </div>
+          <div className="rounded-xl bg-destructive/10 text-destructive text-sm font-semibold px-4 py-2 text-center">{error}</div>
         </div>
       )}
 
-      {/* Debug panel */}
-      {showDebug && (
-        <div className="border-t border-border px-4 py-2 max-h-36 overflow-y-auto bg-muted/50">
-          <p className="text-xs font-bold text-muted-foreground mb-1">Debug Log</p>
-          {debugLog.slice(-10).map((d, i) => (
-            <p key={i} className="text-xs text-muted-foreground font-mono leading-relaxed">
-              <span className="opacity-60">{new Date(d.timestamp).toLocaleTimeString()}</span>{" "}
-              <span className="font-semibold text-foreground">{d.label}</span>
-              {d.detail && <span className="opacity-70"> — {d.detail}</span>}
-            </p>
-          ))}
-          {debugLog.length === 0 && <p className="text-xs text-muted-foreground">No events yet</p>}
-        </div>
-      )}
-
-      {/* Controls */}
       <div className="border-t border-border p-4 pb-6 safe-area-bottom">
         <div className="flex gap-3 justify-center">
           {isIdle ? (
-            <Button
-              onClick={() => connect()}
-              disabled={isConnecting}
-              className="h-16 px-10 text-lg font-black rounded-2xl kid-shadow-lg gap-3"
-            >
-              <Mic className="h-6 w-6" />
-              Start
+            <Button onClick={handleStart} className="h-16 px-10 text-lg font-black rounded-2xl kid-shadow-lg gap-3">
+              <Mic className="h-6 w-6" /> Start
             </Button>
           ) : (
             <>
               <Button
                 onClick={toggleMute}
-                variant={isMuted ? "destructive" : "outline"}
+                variant={userMuted ? "destructive" : "outline"}
                 className="h-16 w-16 rounded-2xl kid-shadow"
-                disabled={!isConnected}
+                disabled={!isConnected || isAiSpeaking}
               >
-                {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                {userMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
               </Button>
               <Button
-                onClick={disconnect}
+                onClick={() => { disconnect(); }}
                 variant="destructive"
                 className="h-16 px-10 text-lg font-black rounded-2xl kid-shadow-lg gap-3"
               >
-                <PhoneOff className="h-6 w-6" />
-                Stop
+                <PhoneOff className="h-6 w-6" /> Stop
               </Button>
             </>
           )}
@@ -162,9 +128,7 @@ function TranscriptBubble({ entry }: { entry: TranscriptEntry }) {
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
         className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm font-semibold ${
-          isUser
-            ? "bg-primary text-primary-foreground rounded-br-md"
-            : "bg-muted text-foreground rounded-bl-md"
+          isUser ? "bg-primary text-primary-foreground rounded-br-md" : "bg-muted text-foreground rounded-bl-md"
         }`}
       >
         <span className="text-[10px] opacity-60 block mb-0.5">
