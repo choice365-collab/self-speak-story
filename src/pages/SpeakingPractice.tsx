@@ -179,9 +179,18 @@ export default function SpeakingPractice() {
   const dcRef = useRef<RTCDataChannel | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const totalAudioSecondsRef = useRef(0);
   const sessionStartTimeRef = useRef(Date.now());
+  const perfRef = useRef<Record<string, number>>({});
+
+  // Perf logging helper
+  const perf = useCallback((label: string) => {
+    const now = performance.now();
+    perfRef.current[label] = now;
+    console.log(`[perf] ${label}: ${now.toFixed(1)}ms`);
+  }, []);
 
   // Mic control: mute while AI speaking, unmute when done
   const setMicEnabled = useCallback((enabled: boolean) => {
@@ -190,13 +199,15 @@ export default function SpeakingPractice() {
     const track = stream.getAudioTracks()[0];
     if (track) {
       track.enabled = enabled;
-      setIsMuted(!enabled);
+      // Only show red mute button if user manually muted, NOT during AI speech
+      // isMuted reflects manual user mute state, not AI-controlled mute
       if (enabled) {
-        // Reset speech detection when mic turns on
+        setIsMuted(false);
         setSpeechDetected(false);
+        perf("t_start_listening");
       }
     }
-  }, []);
+  }, [perf]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -302,6 +313,33 @@ export default function SpeakingPractice() {
     try {
       const instructions = buildSystemInstructions(verbData, profile?.difficulty_level || "medium", profile?.speech_speed || "medium", profile?.korean_hint_mode ?? false);
 
+      // Unlock AudioContext on user gesture
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContext();
+      }
+      if (audioCtxRef.current.state === "suspended") {
+        await audioCtxRef.current.resume();
+      }
+
+      // Reuse existing stream if available, otherwise acquire new one
+      let stream = streamRef.current;
+      if (!stream || stream.getAudioTracks().length === 0 || stream.getAudioTracks()[0].readyState === "ended") {
+        try {
+          const permStatus = await navigator.permissions.query({ name: "microphone" as PermissionName });
+          if (permStatus.state === "denied") {
+            throw new Error("Microphone permission denied. Please enable it in browser settings.");
+          }
+        } catch (permErr: any) {
+          if (permErr.message?.includes("denied")) throw permErr;
+        }
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        localStorage.setItem("micPermissionGranted", "true");
+        streamRef.current = stream;
+      }
+
+      // Start with mic OFF — AI speaks first (but DON'T set isMuted=true, that's for user toggle)
+      stream.getAudioTracks().forEach((track) => { track.enabled = false; });
+
       const tokenRes = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/realtime-token`,
         {
@@ -338,27 +376,9 @@ export default function SpeakingPractice() {
 
       pc.ontrack = (e) => {
         audio.srcObject = e.streams[0];
+        perf("t_audio_track_received");
       };
 
-      // Check permission state before requesting mic
-      let needsRequest = true;
-      try {
-        const permStatus = await navigator.permissions.query({ name: "microphone" as PermissionName });
-        if (permStatus.state === "granted") {
-          needsRequest = true; // still need getUserMedia to get stream, but no popup
-        } else if (permStatus.state === "denied") {
-          throw new Error("Microphone permission denied. Please enable it in browser settings.");
-        }
-      } catch (permErr: any) {
-        if (permErr.message?.includes("denied")) throw permErr;
-        // permissions API not supported — fall through
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      localStorage.setItem("micPermissionGranted", "true");
-      streamRef.current = stream;
-      // Start with mic OFF — AI speaks first
-      stream.getAudioTracks().forEach((track) => { track.enabled = false; });
-      setIsMuted(true);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       const dc = pc.createDataChannel("oai-events");
@@ -368,42 +388,45 @@ export default function SpeakingPractice() {
         try {
           const event = JSON.parse(e.data);
 
-          // Speech detected → cancel silence timer
           if (event.type === "input_audio_buffer.speech_started") {
             setSpeechDetected(true);
+            perf("t_speech_detected");
           }
 
-          // AI starts speaking → mic OFF, reset speech detection
+          if (event.type === "input_audio_buffer.speech_stopped") {
+            perf("t_end_of_speech");
+          }
+
+          // AI starts speaking → mic OFF
           if (event.type === "response.audio.delta") {
+            if (!perfRef.current["t_first_ai_audio"]) {
+              perf("t_first_ai_audio");
+            }
             setAiSpeaking(true);
             setSpeechDetected(false);
-            setMicEnabled(false);
+            // Mute mic track but don't set isMuted (red button)
+            const trk = streamRef.current?.getAudioTracks()[0];
+            if (trk) trk.enabled = false;
           }
 
-          // AI finished speaking → mic ON
           if (event.type === "response.audio_transcript.done" && event.transcript) {
             addTranscript("assistant", event.transcript);
-            setAiSpeaking(false);
-            setMicEnabled(true);
 
             if (event.transcript.includes("PRACTICE COMPLETE")) {
               handleCompletion();
             }
           }
 
-          // response.done also marks end of AI turn
           if (event.type === "response.done") {
             setAiSpeaking(false);
             setMicEnabled(true);
+            perf("t_tts_done");
+            // Reset per-turn perf markers
+            delete perfRef.current["t_first_ai_audio"];
           }
 
           if (event.type === "conversation.item.input_audio_transcription.completed" && event.transcript) {
-            // Check for Korean input — don't display, just track internally
             const transcript = event.transcript.trim();
-            if (containsKorean(transcript)) {
-              // Korean detected — AI will handle via system prompt
-              // Don't add to visible transcripts
-            }
             addTranscript("user", transcript);
             totalAudioSecondsRef.current += 5;
           }
@@ -435,6 +458,7 @@ export default function SpeakingPractice() {
 
       setConnectionState("connected");
       sessionStartTimeRef.current = Date.now();
+      perf("t_session_connected");
 
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
@@ -448,21 +472,22 @@ export default function SpeakingPractice() {
       setError(e.message || "Failed to connect");
       toast.error(e.message || "Failed to connect");
     }
-  }, [verbData, addTranscript, profile]);
+  }, [verbData, addTranscript, profile, perf, setMicEnabled]);
 
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback((stopStream = true) => {
     dcRef.current?.close();
     pcRef.current?.close();
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    if (stopStream) {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
     audioRef.current?.remove();
     pcRef.current = null;
     dcRef.current = null;
     audioRef.current = null;
-    streamRef.current = null;
-    if (connectionState === "connected") {
-      setConnectionState("idle");
-    }
-  }, [connectionState]);
+    setConnectionState("idle");
+    setIsMuted(false);
+  }, []);
 
   const toggleMute = useCallback(() => {
     const stream = streamRef.current;
@@ -631,8 +656,8 @@ export default function SpeakingPractice() {
           <div className="text-center text-destructive font-semibold">{error}</div>
         )}
 
-        {isConnected && isMuted && !aiSpeaking && (
-          <div className="text-center text-sm text-muted-foreground font-semibold">🔇 Microphone muted</div>
+        {isConnected && isMuted && (
+          <div className="text-center text-sm text-destructive font-semibold">🔇 Microphone muted — tap mic button to unmute</div>
         )}
 
         {/* AI Subtitles only — no student transcripts displayed */}
