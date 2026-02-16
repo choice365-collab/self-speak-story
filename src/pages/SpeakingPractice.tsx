@@ -340,7 +340,21 @@ export default function SpeakingPractice() {
         audio.srcObject = e.streams[0];
       };
 
+      // Check permission state before requesting mic
+      let needsRequest = true;
+      try {
+        const permStatus = await navigator.permissions.query({ name: "microphone" as PermissionName });
+        if (permStatus.state === "granted") {
+          needsRequest = true; // still need getUserMedia to get stream, but no popup
+        } else if (permStatus.state === "denied") {
+          throw new Error("Microphone permission denied. Please enable it in browser settings.");
+        }
+      } catch (permErr: any) {
+        if (permErr.message?.includes("denied")) throw permErr;
+        // permissions API not supported — fall through
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localStorage.setItem("micPermissionGranted", "true");
       streamRef.current = stream;
       // Start with mic OFF — AI speaks first
       stream.getAudioTracks().forEach((track) => { track.enabled = false; });

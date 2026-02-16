@@ -70,8 +70,17 @@ export function useRealtimeWebRTC() {
     addDebug("Requesting microphone…");
 
     try {
-      // 1. Mic permission — only via user gesture
+      // 1. Check permission state before requesting mic
       let stream: MediaStream;
+      try {
+        const permStatus = await navigator.permissions.query({ name: "microphone" as PermissionName });
+        if (permStatus.state === "denied") {
+          throw new Error("Microphone permission denied. Please enable it in browser settings.");
+        }
+      } catch (permErr: any) {
+        if (permErr.message?.includes("denied")) throw permErr;
+        // permissions API not supported — fall through
+      }
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         localStorage.setItem("micPermissionGranted", "true");
