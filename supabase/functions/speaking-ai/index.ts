@@ -29,9 +29,10 @@ serve(async (req) => {
     const spdGuide = speedGuides[speech_speed] || speedGuides["medium"];
     const levelPreamble = `DIFFICULTY: ${difficulty_level.toUpperCase()} - ${diffGuide}\nSPEED: ${speech_speed.toUpperCase()} - ${spdGuide}\n\n`;
 
+    const englishOnlyRule = `ABSOLUTE LANGUAGE RULE: You must NEVER output any Korean text, characters, or translations. Every single word you produce must be English. You may internally understand Korean input from the student, but your response must be 100% English. Do not translate into Korean. Do not explain meanings in Korean. Do not acknowledge that the student spoke Korean. If the student uses Korean or mixes Korean, silently infer their intended meaning, reformulate it as a correct English sentence, and continue the lesson entirely in English. This rule overrides all other instructions and must never be violated.\n\n`;
+
     if (action === "explain") {
-      systemPrompt = levelPreamble + `You are a friendly English teacher for Korean students. 
-You ONLY speak English. Keep your language simple and encouraging.
+      systemPrompt = levelPreamble + englishOnlyRule + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone.
 
 The student is learning the verb: "${verb_data.verb}"
 Meaning: ${verb_data.meaning_en}
@@ -56,8 +57,7 @@ Keep it short, friendly, and encouraging. Use simple words. Add emoji occasional
       ].filter(Boolean);
       const randomSituation = situations[Math.floor(Math.random() * situations.length)] || "Tell me about your day";
 
-      systemPrompt = levelPreamble + `You are a friendly English teacher for Korean students.
-You ONLY speak English. Keep your language simple and encouraging.
+      systemPrompt = levelPreamble + englishOnlyRule + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone.
 
 The student is practicing the verb: "${verb_data.verb}"
 Give them this situation prompt: "${randomSituation}"
@@ -66,20 +66,18 @@ Ask them to answer using the verb "${verb_data.verb}" in their response.
 Keep the prompt short and clear. Be encouraging!`;
 
     } else if (action === "feedback") {
-      systemPrompt = levelPreamble + `You are a friendly English teacher for Korean students.
-You ONLY speak English. Keep your language simple.
+      systemPrompt = levelPreamble + englishOnlyRule + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone.
 
 The student is practicing the verb: "${verb_data.verb}"
 They just answered. Your job:
 1. Acknowledge their effort positively
-2. If there are grammar mistakes, gently correct them
-3. Give the corrected sentence
-4. Ask them to repeat the corrected sentence 2-3 times
-5. Be encouraging and supportive!
+2. If there are grammar mistakes, briefly explain what was wrong in English, then give the corrected sentence
+3. Ask them to repeat the corrected sentence 2-3 times
+4. If the student used Korean, infer meaning and reformulate in English without mentioning Korean
 
 Keep feedback SHORT and CLEAR.`;
     } else {
-      systemPrompt = levelPreamble + `You are a friendly English teacher. You ONLY speak English. Be encouraging and helpful.`;
+      systemPrompt = levelPreamble + englishOnlyRule + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone. Be encouraging and helpful.`;
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
