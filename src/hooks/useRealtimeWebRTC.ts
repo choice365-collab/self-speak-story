@@ -165,7 +165,11 @@ export function useRealtimeWebRTC() {
       const pc = new RTCPeerConnection();
       pcRef.current = pc;
 
+      // Store remote stream for re-attachment after barge-in
+      const remoteStreamRef = { current: null as MediaStream | null };
+
       pc.ontrack = (e) => {
+        remoteStreamRef.current = e.streams[0];
         audio.srcObject = e.streams[0];
         audio.play().catch(() => {});
         perf("tts_play_started");
@@ -190,9 +194,28 @@ export function useRealtimeWebRTC() {
           const event = JSON.parse(e.data);
           const type = event.type as string;
 
+          // ── Barge-in: student speech interrupts AI ──
           if (type === "input_audio_buffer.speech_started") {
             setSpeechDetected(true);
             perf("speech_detected");
+
+            // If AI is speaking, immediately stop playback
+            if (audioRef.current?.srcObject) {
+              // Pause and reset the audio element to kill TTS output
+              audioRef.current.pause();
+              audioRef.current.srcObject = null;
+            }
+            setIsAiSpeaking(false);
+
+            // Truncate the in-flight AI response via data channel
+            const truncateDc = dcRef.current;
+            if (truncateDc && truncateDc.readyState === "open") {
+              truncateDc.send(JSON.stringify({ type: "response.cancel" }));
+            }
+
+            // Ensure mic is fully open for student
+            const micTrack = streamRef.current?.getAudioTracks()[0];
+            if (micTrack) micTrack.enabled = true;
           }
 
           if (type === "input_audio_buffer.speech_stopped") {
@@ -202,6 +225,11 @@ export function useRealtimeWebRTC() {
           // AI audio chunk
           if (type === "response.audio.delta") {
             if (!firstChunkLogged) { perf("first_tts_chunk_received"); firstChunkLogged = true; }
+            // Re-attach audio if cleared by barge-in
+            if (audioRef.current && !audioRef.current.srcObject && remoteStreamRef.current) {
+              audioRef.current.srcObject = remoteStreamRef.current;
+              audioRef.current.play().catch(() => {});
+            }
             setIsAiSpeaking(true);
             setSpeechDetected(false);
             // Ensure mic off while AI speaks
