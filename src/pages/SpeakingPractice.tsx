@@ -184,6 +184,7 @@ export default function SpeakingPractice() {
   const totalAudioSecondsRef = useRef(0);
   const sessionStartTimeRef = useRef(Date.now());
   const perfRef = useRef<Record<string, number>>({});
+  const userMutedRef = useRef(false); // sync ref for use inside closures
 
   // Perf logging helper
   const perf = useCallback((label: string) => {
@@ -304,21 +305,35 @@ export default function SpeakingPractice() {
 
   const connect = useCallback(async () => {
     if (!verbData) return;
+    perf("start_click");
     setConnectionState("connecting");
     setError(null);
+    setUserMuted(false);
 
     try {
       const instructions = buildSystemInstructions(verbData, profile?.difficulty_level || "medium", profile?.speech_speed || "medium", profile?.korean_hint_mode ?? false);
 
-      // Unlock AudioContext on user gesture
+      // ── 1. Chrome audio unlock (MUST happen in user gesture) ──
       if (!audioCtxRef.current) {
         audioCtxRef.current = new AudioContext();
       }
       if (audioCtxRef.current.state === "suspended") {
         await audioCtxRef.current.resume();
       }
+      perf("audio_ctx_resumed");
 
-      // Reuse existing stream if available, otherwise acquire new one
+      // Create and warm up audio element IN the user gesture stack
+      const audio = document.createElement("audio");
+      audio.autoplay = true;
+      (audio as any).playsInline = true; // Android Chrome
+      document.body.appendChild(audio); // Chrome needs it in DOM
+      // Play silent source to unlock audio output in Chrome
+      audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+      try { await audio.play(); } catch {}
+      audio.src = ""; // clear silent source
+      audioRef.current = audio;
+
+      // ── 2. Mic: reuse existing stream or acquire new ──
       let stream = streamRef.current;
       if (!stream || stream.getAudioTracks().length === 0 || stream.getAudioTracks()[0].readyState === "ended") {
         try {
@@ -333,10 +348,10 @@ export default function SpeakingPractice() {
         localStorage.setItem("micPermissionGranted", "true");
         streamRef.current = stream;
       }
+      // Mic OFF — AI speaks first
+      stream.getAudioTracks().forEach((t) => { t.enabled = false; });
 
-      // Start with mic OFF — AI speaks first (but DON'T set isMuted=true, that's for user toggle)
-      stream.getAudioTracks().forEach((track) => { track.enabled = false; });
-
+      // ── 3. Get ephemeral token ──
       const tokenRes = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/realtime-token`,
         {
@@ -364,28 +379,30 @@ export default function SpeakingPractice() {
       const ephemeralKey = session.client_secret?.value;
       if (!ephemeralKey) throw new Error("No ephemeral key returned");
 
+      // ── 4. WebRTC peer connection ──
       const pc = new RTCPeerConnection();
       pcRef.current = pc;
 
-      const audio = document.createElement("audio");
-      audio.autoplay = true;
-      audioRef.current = audio;
-
       pc.ontrack = (e) => {
         audio.srcObject = e.streams[0];
-        perf("t_audio_track_received");
+        // Re-play to ensure Chrome outputs audio
+        audio.play().catch(() => {});
+        perf("tts_play_started");
       };
 
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
+      // ── 5. Data channel ──
       const dc = pc.createDataChannel("oai-events");
       dcRef.current = dc;
 
-      // When data channel opens, trigger immediate AI greeting
+      let firstChunkLogged = false;
+
       dc.onopen = () => {
-        perf("t_dc_open");
+        perf("dc_open");
+        // Trigger AI to speak immediately
         dc.send(JSON.stringify({ type: "response.create" }));
-        perf("t_ai_request_sent");
+        perf("first_ai_request_sent");
       };
 
       dc.onmessage = (e) => {
@@ -394,49 +411,52 @@ export default function SpeakingPractice() {
 
           if (event.type === "input_audio_buffer.speech_started") {
             setSpeechDetected(true);
-            perf("t_speech_detected");
+            perf("speech_detected");
           }
 
           if (event.type === "input_audio_buffer.speech_stopped") {
-            perf("t_end_of_speech");
+            perf("end_of_speech");
           }
 
-          // AI starts speaking → mic OFF
+          // AI audio chunk → mute mic, mark speaking
           if (event.type === "response.audio.delta") {
-            if (!perfRef.current["t_first_ai_audio"]) {
-              perf("t_first_ai_audio");
+            if (!firstChunkLogged) {
+              perf("first_tts_chunk_received");
+              firstChunkLogged = true;
             }
             setAiSpeaking(true);
             setSpeechDetected(false);
-            // Mute mic track but don't set isMuted (red button)
             const trk = streamRef.current?.getAudioTracks()[0];
             if (trk) trk.enabled = false;
           }
 
           if (event.type === "response.audio_transcript.done" && event.transcript) {
             addTranscript("assistant", event.transcript);
-
             if (event.transcript.includes("PRACTICE COMPLETE")) {
               handleCompletion();
             }
           }
 
+          // AI done → open mic
           if (event.type === "response.done") {
             setAiSpeaking(false);
-            setMicEnabled(true);
-            perf("t_tts_done");
-            // Reset per-turn perf markers
-            delete perfRef.current["t_first_ai_audio"];
+            perf("tts_play_ended");
+            // Only open mic if user hasn't manually muted
+            if (!userMutedRef.current) {
+              setMicEnabled(true);
+              perf("mic_opened");
+            }
+            firstChunkLogged = false;
           }
 
           if (event.type === "conversation.item.input_audio_transcription.completed" && event.transcript) {
-            const transcript = event.transcript.trim();
-            addTranscript("user", transcript);
+            addTranscript("user", event.transcript.trim());
             totalAudioSecondsRef.current += 5;
           }
         } catch {}
       };
 
+      // ── 6. SDP exchange ──
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
@@ -462,10 +482,7 @@ export default function SpeakingPractice() {
 
       setConnectionState("connected");
       sessionStartTimeRef.current = Date.now();
-      perf("t_session_connected");
-
-      // Ensure audio plays (needed for some browsers)
-      try { await audio.play(); } catch { /* autoplay may handle it */ }
+      perf("session_connected");
 
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
@@ -494,6 +511,7 @@ export default function SpeakingPractice() {
     audioRef.current = null;
     setConnectionState("idle");
     setUserMuted(false);
+    userMutedRef.current = false;
   }, []);
 
   const toggleMute = useCallback(() => {
@@ -503,6 +521,7 @@ export default function SpeakingPractice() {
     if (track) {
       track.enabled = !track.enabled;
       setUserMuted(!track.enabled);
+      userMutedRef.current = !track.enabled;
     }
   }, [aiSpeaking]);
 
