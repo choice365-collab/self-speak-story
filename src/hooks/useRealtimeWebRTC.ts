@@ -1,97 +1,139 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
-type ConnectionState = "disconnected" | "connecting" | "connected" | "error";
-export type MicStatus = "checking" | "ready" | "needs_permission" | "denied";
+export type RealtimeStatus = "idle" | "connecting" | "connected" | "error";
 
 export type TranscriptEntry = {
-  role: "user" | "ai";
+  role: "user" | "assistant";
   text: string;
-  final: boolean;
   timestamp: number;
 };
 
-export type DebugEntry = {
-  label: string;
-  timestamp: number;
-  detail?: string;
+type ConnectOptions = {
+  instructions?: string;
+  voice?: string;
+  turnDetection?: Record<string, unknown>;
+  inputAudioTranscription?: Record<string, unknown>;
+  speed?: string;
+  /** Called when AI transcript is finalized */
+  onAiTranscript?: (text: string) => void;
+  /** Called when user transcript is finalized */
+  onUserTranscript?: (text: string) => void;
+  /** Called right after data channel opens — send initial prompt here */
+  onReady?: (sendText: (text: string) => void) => void;
+  /** Called when AI starts speaking */
+  onAiSpeakingStart?: () => void;
+  /** Called when AI finishes speaking */
+  onAiSpeakingEnd?: () => void;
 };
 
+/**
+ * Single source of truth for OpenAI Realtime WebRTC.
+ * Manages: mic stream, RTCPeerConnection, data channel, audio output.
+ */
 export function useRealtimeWebRTC() {
-  const [state, setState] = useState<ConnectionState>("disconnected");
+  const [status, setStatus] = useState<RealtimeStatus>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [isMuted, setIsMuted] = useState(false);
-  const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
-  const [partialTranscript, setPartialTranscript] = useState<string>("");
-  const [debugLog, setDebugLog] = useState<DebugEntry[]>([]);
-  const [micStatus, setMicStatus] = useState<MicStatus>("checking");
-
-  // Check mic permission on mount without triggering a prompt
-  useEffect(() => {
-    async function checkMic() {
-      try {
-        const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
-        if (result.state === "granted") {
-          setMicStatus("ready");
-          localStorage.setItem("micPermissionGranted", "true");
-        } else if (result.state === "denied") {
-          setMicStatus("denied");
-          localStorage.removeItem("micPermissionGranted");
-        } else {
-          setMicStatus(localStorage.getItem("micPermissionGranted") === "true" ? "ready" : "needs_permission");
-        }
-        result.addEventListener("change", () => {
-          if (result.state === "granted") { setMicStatus("ready"); localStorage.setItem("micPermissionGranted", "true"); }
-          else if (result.state === "denied") { setMicStatus("denied"); localStorage.removeItem("micPermissionGranted"); }
-          else { setMicStatus("needs_permission"); }
-        });
-      } catch {
-        // Fallback if permissions API not supported
-        setMicStatus(localStorage.getItem("micPermissionGranted") === "true" ? "ready" : "needs_permission");
-      }
-    }
-    checkMic();
-  }, []);
+  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+  const [speechDetected, setSpeechDetected] = useState(false);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const aiSpeakingRef = useRef(false);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const callbacksRef = useRef<ConnectOptions>({});
+  const perfRef = useRef<Record<string, number>>({});
 
-  const addDebug = useCallback((label: string, detail?: string) => {
-    setDebugLog((prev) => [...prev.slice(-29), { label, timestamp: Date.now(), detail }]);
+  // Perf logging
+  const perf = useCallback((label: string) => {
+    const now = performance.now();
+    perfRef.current[label] = now;
+    console.log(`[perf] ${label}: ${now.toFixed(1)}ms`);
   }, []);
 
-  const connect = useCallback(async (options?: { model?: string; voice?: string; instructions?: string }) => {
-    setState("connecting");
+  // ── Mic management (single getUserMedia) ──
+
+  const ensureMic = useCallback(async (): Promise<MediaStream> => {
+    const existing = streamRef.current;
+    if (existing && existing.getAudioTracks().length > 0 && existing.getAudioTracks()[0].readyState !== "ended") {
+      return existing;
+    }
+    // Check permission first
+    try {
+      const perm = await navigator.permissions.query({ name: "microphone" as PermissionName });
+      if (perm.state === "denied") {
+        throw new Error("Microphone permission denied. Please enable it in browser settings.");
+      }
+    } catch (e: any) {
+      if (e.message?.includes("denied")) throw e;
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    localStorage.setItem("micPermissionGranted", "true");
+    streamRef.current = stream;
+    return stream;
+  }, []);
+
+  const setMicEnabled = useCallback((enabled: boolean) => {
+    const track = streamRef.current?.getAudioTracks()[0];
+    if (track) {
+      track.enabled = enabled;
+      if (enabled) setSpeechDetected(false);
+      perf(enabled ? "mic_opened" : "mic_muted");
+    }
+  }, [perf]);
+
+  const setSpeakerMuted = useCallback((muted: boolean) => {
+    if (audioRef.current) {
+      audioRef.current.muted = muted;
+    }
+  }, []);
+
+  // ── Send text via data channel ──
+
+  const sendUserText = useCallback((text: string) => {
+    const dc = dcRef.current;
+    if (!dc || dc.readyState !== "open") return;
+    // Mute mic — AI will speak
+    setMicEnabled(false);
+    dc.send(JSON.stringify({
+      type: "conversation.item.create",
+      item: { type: "message", role: "user", content: [{ type: "input_text", text }] },
+    }));
+    dc.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio", "text"] } }));
+    setIsAiSpeaking(true);
+    setSpeechDetected(false);
+  }, [setMicEnabled]);
+
+  // ── Connect ──
+
+  const connect = useCallback(async (options: ConnectOptions = {}) => {
+    callbacksRef.current = options;
+    setStatus("connecting");
     setError(null);
-    setTranscripts([]);
-    setPartialTranscript("");
-    addDebug("Requesting microphone…");
+    perf("start_click");
 
     try {
-      // 1. Check permission state before requesting mic
-      let stream: MediaStream;
-      try {
-        const permStatus = await navigator.permissions.query({ name: "microphone" as PermissionName });
-        if (permStatus.state === "denied") {
-          throw new Error("Microphone permission denied. Please enable it in browser settings.");
-        }
-      } catch (permErr: any) {
-        if (permErr.message?.includes("denied")) throw permErr;
-        // permissions API not supported — fall through
-      }
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        localStorage.setItem("micPermissionGranted", "true");
-      } catch (micErr: any) {
-        localStorage.removeItem("micPermissionGranted");
-        throw new Error("Please enable microphone access in your browser settings.");
-      }
-      streamRef.current = stream;
-      addDebug("Microphone granted");
+      // 1. Chrome audio unlock (must be in user gesture)
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      if (audioCtxRef.current.state === "suspended") await audioCtxRef.current.resume();
+      perf("audio_ctx_resumed");
 
-      // 2. Get ephemeral token
+      // Create audio element & warm up in user gesture
+      const audio = document.createElement("audio");
+      audio.autoplay = true;
+      (audio as any).playsInline = true;
+      document.body.appendChild(audio);
+      audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+      try { await audio.play(); } catch {}
+      audio.src = "";
+      audioRef.current = audio;
+
+      // 2. Mic — reuse or acquire
+      const stream = await ensureMic();
+      // Mic OFF initially — AI speaks first
+      stream.getAudioTracks().forEach((t) => { t.enabled = false; });
+
+      // 3. Ephemeral token
       const tokenRes = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/realtime-token`,
         {
@@ -101,11 +143,11 @@ export function useRealtimeWebRTC() {
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
           body: JSON.stringify({
-            model: options?.model || "gpt-4o-mini-realtime-preview",
-            voice: options?.voice || "alloy",
-            instructions: options?.instructions || "You are a friendly English conversation partner. Speak only in English. Be encouraging and patient. Keep responses concise.",
-            turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 500 },
-            input_audio_transcription: { model: "gpt-4o-mini-transcribe" },
+            voice: options.voice || "alloy",
+            instructions: options.instructions || "You are a friendly English tutor.",
+            turn_detection: options.turnDetection || { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 3000 },
+            input_audio_transcription: options.inputAudioTranscription || { model: "gpt-4o-mini-transcribe" },
+            speed: options.speed || "medium",
           }),
         }
       );
@@ -118,183 +160,133 @@ export function useRealtimeWebRTC() {
       const session = await tokenRes.json();
       const ephemeralKey = session.client_secret?.value;
       if (!ephemeralKey) throw new Error("No ephemeral key returned");
-      addDebug("Token received", `session: ${session.id?.slice(0, 12)}…`);
 
-      // 3. WebRTC peer connection
+      // 4. RTCPeerConnection
       const pc = new RTCPeerConnection();
       pcRef.current = pc;
 
-      const audio = document.createElement("audio");
-      audio.autoplay = true;
-      audioRef.current = audio;
-
       pc.ontrack = (e) => {
         audio.srcObject = e.streams[0];
-        addDebug("AI audio track received");
+        audio.play().catch(() => {});
+        perf("tts_play_started");
       };
 
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      // 4. Data channel
+      // 5. Data channel
       const dc = pc.createDataChannel("oai-events");
       dcRef.current = dc;
+      let firstChunkLogged = false;
 
-      dc.onopen = () => addDebug("Data channel open");
+      dc.onopen = () => {
+        perf("dc_open");
+        // Let the consumer send the first prompt
+        callbacksRef.current.onReady?.(sendUserText);
+        perf("first_ai_request_sent");
+      };
 
       dc.onmessage = (e) => {
         try {
           const event = JSON.parse(e.data);
-          handleServerEvent(event);
-        } catch {
-          // ignore
-        }
+          const type = event.type as string;
+
+          if (type === "input_audio_buffer.speech_started") {
+            setSpeechDetected(true);
+            perf("speech_detected");
+          }
+
+          if (type === "input_audio_buffer.speech_stopped") {
+            perf("end_of_speech");
+          }
+
+          // AI audio chunk
+          if (type === "response.audio.delta") {
+            if (!firstChunkLogged) { perf("first_tts_chunk_received"); firstChunkLogged = true; }
+            setIsAiSpeaking(true);
+            setSpeechDetected(false);
+            // Ensure mic off while AI speaks
+            const trk = streamRef.current?.getAudioTracks()[0];
+            if (trk) trk.enabled = false;
+            callbacksRef.current.onAiSpeakingStart?.();
+          }
+
+          // AI transcript done
+          if (type === "response.audio_transcript.done" && event.transcript) {
+            callbacksRef.current.onAiTranscript?.(event.transcript.trim());
+          }
+
+          // AI response done → open mic
+          if (type === "response.done") {
+            setIsAiSpeaking(false);
+            perf("tts_play_ended");
+            firstChunkLogged = false;
+            callbacksRef.current.onAiSpeakingEnd?.();
+          }
+
+          // User transcript
+          if (type === "conversation.item.input_audio_transcription.completed" && event.transcript) {
+            callbacksRef.current.onUserTranscript?.(event.transcript.trim());
+          }
+        } catch {}
       };
 
-      // 5. SDP exchange
+      // 6. SDP exchange
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
+      const model = session.model || "gpt-4o-mini-realtime-preview";
       const sdpRes = await fetch(
-        `https://api.openai.com/v1/realtime?model=${options?.model || "gpt-4o-mini-realtime-preview"}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${ephemeralKey}`,
-            "Content-Type": "application/sdp",
-          },
-          body: offer.sdp,
-        }
+        `https://api.openai.com/v1/realtime?model=${model}`,
+        { method: "POST", headers: { Authorization: `Bearer ${ephemeralKey}`, "Content-Type": "application/sdp" }, body: offer.sdp }
       );
+      if (!sdpRes.ok) throw new Error(`SDP exchange failed: ${sdpRes.status}`);
 
-      if (!sdpRes.ok) {
-        throw new Error(`SDP exchange failed: ${sdpRes.status}`);
-      }
-
-      const answerSdp = await sdpRes.text();
-      await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
-
-      setState("connected");
-      addDebug("WebRTC connected");
+      await pc.setRemoteDescription({ type: "answer", sdp: await sdpRes.text() });
+      setStatus("connected");
+      perf("session_connected");
 
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-          setState("error");
+          setStatus("error");
           setError("Connection lost");
-          addDebug("Connection lost", pc.connectionState);
         }
       };
     } catch (e: any) {
       console.error("WebRTC connect error:", e);
-      setState("error");
+      setStatus("error");
       setError(e.message || "Failed to connect");
-      addDebug("Error", e.message);
-      // Cleanup stream on error
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
     }
-  }, [addDebug]);
+  }, [ensureMic, perf, sendUserText]);
 
-  const handleServerEvent = useCallback((event: any) => {
-    const type = event.type as string;
-
-    switch (type) {
-      // User speech detected → barge-in: cancel AI response
-      case "input_audio_buffer.speech_started":
-        addDebug("User speaking…");
-        if (aiSpeakingRef.current) {
-          // Barge-in: cancel ongoing AI response
-          const dc = dcRef.current;
-          if (dc?.readyState === "open") {
-            dc.send(JSON.stringify({ type: "response.cancel" }));
-            addDebug("Barge-in → response.cancel sent");
-          }
-          aiSpeakingRef.current = false;
-        }
-        break;
-
-      case "input_audio_buffer.speech_stopped":
-        addDebug("User stopped speaking");
-        break;
-
-      // Live partial transcript of user speech
-      case "conversation.item.input_audio_transcription.completed":
-        {
-          const text = event.transcript?.trim();
-          if (text) {
-            setPartialTranscript("");
-            setTranscripts((prev) => [...prev, { role: "user", text, final: true, timestamp: Date.now() }]);
-            addDebug("User transcript", text.slice(0, 40));
-          }
-        }
-        break;
-
-      // AI started generating audio
-      case "response.audio.delta":
-        aiSpeakingRef.current = true;
-        break;
-
-      // AI finished speaking - show transcript
-      case "response.audio_transcript.done":
-        {
-          const text = event.transcript?.trim();
-          if (text) {
-            setTranscripts((prev) => [...prev, { role: "ai", text, final: true, timestamp: Date.now() }]);
-            addDebug("AI transcript", text.slice(0, 40));
-          }
-          aiSpeakingRef.current = false;
-        }
-        break;
-
-      case "response.done":
-        aiSpeakingRef.current = false;
-        break;
-
-      case "error":
-        addDebug("Server error", JSON.stringify(event.error)?.slice(0, 80));
-        break;
-
-      default:
-        // Ignore other events
-        break;
-    }
-  }, [addDebug]);
+  // ── Disconnect ──
 
   const disconnect = useCallback(() => {
     dcRef.current?.close();
     pcRef.current?.close();
     streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
     audioRef.current?.remove();
     pcRef.current = null;
     dcRef.current = null;
     audioRef.current = null;
-    streamRef.current = null;
-    aiSpeakingRef.current = false;
-    setState("disconnected");
-    setPartialTranscript("");
-    addDebug("Disconnected by user");
-  }, [addDebug]);
+    setStatus("idle");
+    setIsAiSpeaking(false);
+    setSpeechDetected(false);
+  }, []);
 
-  const toggleMute = useCallback(() => {
-    const stream = streamRef.current;
-    if (!stream) return;
-    const track = stream.getAudioTracks()[0];
-    if (track) {
-      track.enabled = !track.enabled;
-      setIsMuted(!track.enabled);
-      addDebug(track.enabled ? "Unmuted" : "Muted");
-    }
-  }, [addDebug]);
+  // Cleanup on unmount
+  useEffect(() => () => { disconnect(); }, [disconnect]);
 
   return {
-    state,
+    status,
     error,
-    isMuted,
-    micStatus,
-    transcripts,
-    partialTranscript,
-    debugLog,
+    isAiSpeaking,
+    speechDetected,
     connect,
     disconnect,
-    toggleMute,
+    ensureMic,
+    setMicEnabled,
+    setSpeakerMuted,
+    sendUserText,
   };
 }
