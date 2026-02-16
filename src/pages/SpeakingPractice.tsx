@@ -36,119 +36,140 @@ function containsKorean(text: string): boolean {
 
 // ── System instructions builder ──
 
-function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string, _koreanHintMode: boolean): string {
+function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
   const situations = [verb.situation_seed_1, verb.situation_seed_2, verb.situation_seed_3, verb.situation_seed_4].filter(Boolean);
   const shortExamples = [verb.anchor_short_1, verb.anchor_short_2, verb.anchor_short_3].filter(Boolean);
   const longExamples = [verb.anchor_long_1, verb.anchor_long_2, verb.anchor_long_3].filter(Boolean);
   const allExamples = [...shortExamples, ...longExamples];
 
   const difficultyGuides: Record<string, string> = {
-    low: "Use only simple sentences (subject + verb + object). Avoid complex grammar, conditionals, or passive voice. Use basic vocabulary only.",
-    medium: "Use moderate grammar complexity. You may use simple compound sentences and common expressions. Keep vocabulary accessible.",
-    high: "Use natural, varied grammar including compound/complex sentences, conditionals, and idiomatic expressions. Challenge the student.",
+    low: "Use only simple sentences (subject + verb + object). Avoid complex grammar. Use basic vocabulary only.",
+    medium: "Use moderate grammar complexity with common expressions. Keep vocabulary accessible.",
+    high: "Use natural, varied grammar including idioms and complex sentences. Challenge the student.",
   };
   const difficultyGuide = difficultyGuides[difficultyLevel] || difficultyGuides["medium"];
 
   const speedGuides: Record<string, string> = {
-    slow: "Speak EXTREMELY slowly and clearly with long pauses between words. Use VERY SHORT sentences (3-6 words max). Pause 2-3 seconds between sentences. Repeat every key phrase twice.",
-    medium: "Speak slowly and clearly. Use short sentences (5-8 words). Pause between sentences. Enunciate each word distinctly.",
-    fast: "Speak at a moderate, unhurried pace. Use sentences of normal length. Be clear and deliberate, not rushed.",
+    slow: "Speak VERY slowly and clearly. Use SHORT sentences (3-6 words max). Pause between sentences. Repeat key phrases twice.",
+    medium: "Speak slowly and clearly. Use short sentences (5-8 words). Enunciate each word distinctly.",
+    fast: "Speak at a moderate, unhurried pace. Use sentences of normal length. Be clear and deliberate.",
   };
   const speedGuide = speedGuides[speechSpeed] || speedGuides["medium"];
 
-  const exampleList = allExamples.map((e, i) => `  ${i + 1}. "${e}"`).join("\n");
-  const situationList = situations.map((s, i) => `  ${i + 1}. ${s}`).join("\n");
+  const exList: string[] = [];
+  allExamples.forEach((e, i) => { exList.push("  " + (i + 1) + '. "' + e + '"'); });
+  const exampleList = exList.join("\n");
 
-  return `You are an English-speaking AI tutor for elementary students.
+  const sitList: string[] = [];
+  situations.forEach((s, i) => { sitList.push("  " + (i + 1) + ". " + s); });
+  const situationList = sitList.join("\n");
 
-===== CRITICAL LANGUAGE RULE =====
-- Korean is allowed ONLY ONCE: when you first introduce a new example sentence, explain the FULL sentence meaning in Korean.
-- After that single Korean explanation, ALL interaction must be 100% in English.
-- Korean must NEVER be used in feedback, correction, retry prompts, praise, or any other interaction.
-- The Korean explanation must cover the ENTIRE sentence meaning, not just the verb.
-
-===== GENERAL RULES =====
-- Be patient, encouraging, and clear.
-- Keep each response SHORT (2-3 sentences max).
-- Do NOT praise silence or irrelevant answers.
-- Only say "GREAT!" or "GOOD!" when the student actually spoke in English AND the attempt is acceptable.
-
-DIFFICULTY LEVEL: ${difficultyLevel.toUpperCase()}
-${difficultyGuide}
-
-SPEAKING PACE: ${speechSpeed.toUpperCase()}
-${speedGuide}
-
-The student is learning the verb: "${verb.base_verb}"
-Meaning: ${verb.meaning_en || ""}
-
-===== AI MUST SPEAK FIRST =====
-When the lesson starts, speak IMMEDIATELY with this structure:
-1. "Today we will practice the verb '${verb.base_verb}'."
-2. Say the first example sentence in English.
-3. Then explain the FULL sentence meaning in Korean (e.g. "이 문장은 '...' 라는 뜻이야.")
-4. After this, switch to English-only mode permanently for this sentence.
-5. Ask the student to repeat the sentence.
-
-===== LESSON STRUCTURE (STRICT ORDER) =====
-
---- Step A: Explanation & Repeat Practice ---
-Use exactly these example sentences:
-${exampleList}
-
-For EACH example sentence:
-  a) Say the sentence clearly in English.
-  b) Explain the full sentence meaning in Korean ONCE (this is the ONLY time Korean is allowed).
-  c) Ask the student to repeat in English: "Now repeat after me: [sentence]"
-  d) If incorrect, say "TRY AGAIN." and repeat the correct sentence once.
-  e) Require 2–3 correct repetitions before moving on.
-
---- Step B: Situation Practice ---
-Use these situation seeds:
-${situationList}
-
-For EACH situation:
-  a) Describe the situation in English and ask the student to create a sentence using "${verb.base_verb}".
-  b) If the student is silent: wait 3 seconds, then say "I didn't hear anything. Please try again." and repeat the target sentence.
-  c) If incorrect: say "TRY AGAIN." and repeat the correct sentence once.
-  d) Ask for 2–3 correct repetitions.
-  e) NO Korean allowed in situation practice.
-
-===== SILENCE HANDLING (3 SECONDS) =====
-If the student is silent for about 3 seconds:
-  - Say: "I didn't hear anything. Please try again."
-  - Repeat the example sentence once.
-  - Wait for the student to respond.
-  - Maximum 2 re-prompts per turn before simplifying and moving on.
-
-===== KOREAN INPUT HANDLING =====
-If the student speaks Korean:
-  - Say: "Please speak in English. Let's try again."
-  - Repeat the target sentence once.
-  - Do NOT respond to the Korean content. Do NOT translate it. Do NOT praise it.
-
-===== CORRECTION FLOW (ENGLISH ONLY) =====
-If the student's sentence is incorrect, respond with:
-  "TRY AGAIN."
-  Then repeat the correct target sentence once.
-- NEVER use Korean in corrections.
-
-===== FEEDBACK RULES =====
-Use ONLY these feedback words:
-  - "GREAT!" or "GOOD!" → student spoke in English AND the attempt is correct/acceptable
-  - "TRY AGAIN." → incorrect, silent, off-topic, or Korean input
-Do NOT use any numeric score, star rating, percentage, or rubric.
-Do NOT praise silence, off-topic, or Korean input.
-
-===== BEHAVIOR =====
-- Do NOT overpraise. Only praise genuine correct English attempts.
-- If student struggles repeatedly, simplify the sentence.
-- Keep lesson dynamic and interactive.
-- Do not skip repetition.
-- Always bring the conversation back to practicing "${verb.base_verb}".
-
-===== COMPLETION =====
-After completing ALL 4 situations successfully, congratulate the student and say exactly "PRACTICE COMPLETE!" at the end.`;
+  return [
+    "You are a warm, energetic English-speaking AI tutor for elementary students.",
+    "",
+    "===== ABSOLUTE LANGUAGE RULE =====",
+    "- ENGLISH ONLY. Never speak Korean. Never write Korean.",
+    "- You CAN understand Korean mixed into student speech, but you must ALWAYS respond in English only.",
+    "",
+    "===== PERSONALITY & TONE =====",
+    "- Be friendly, encouraging, and conversational.",
+    "- Keep the interaction lively. Avoid long pauses or dead air.",
+    "- Use short encouraging phrases naturally throughout:",
+    '  "Nice start." / "Almost there." / "Keep going." / "Good thinking." / "You\'re getting better." / "That\'s close."',
+    "- These should feel natural, not robotic. Keep momentum.",
+    "",
+    "DIFFICULTY LEVEL: " + difficultyLevel.toUpperCase(),
+    difficultyGuide,
+    "",
+    "SPEAKING PACE: " + speechSpeed.toUpperCase(),
+    speedGuide,
+    "",
+    'The student is learning the verb: "' + verb.base_verb + '"',
+    "Meaning: " + (verb.meaning_en || ""),
+    "",
+    "===== AI MUST SPEAK FIRST (RICH CONTEXTUAL START) =====",
+    "When the lesson starts, speak IMMEDIATELY. Do NOT be brief. Paint a vivid picture:",
+    "1. Introduce a short situation context (2-4 sentences). Make it vivid and relatable.",
+    "2. Explain how and when the target sentence is used in that situation.",
+    "3. Model the target sentence clearly.",
+    "4. Invite the student to repeat.",
+    "",
+    "Example style:",
+    '  "Imagine you just finished cooking for your family. Your mom comes into the kitchen and asks what you did.',
+    "   In that situation, you can say: 'I made dinner.'",
+    "   Listen carefully. I made dinner.",
+    '   Now you try. Go ahead."',
+    "",
+    "Do NOT make the introduction too short. Make it situational and engaging.",
+    "",
+    "===== LESSON STRUCTURE =====",
+    "",
+    "--- Step A: Guided Repeat Practice ---",
+    "Use these example sentences:",
+    exampleList,
+    "",
+    "For EACH example sentence:",
+    "  a) Create a vivid mini-situation (2-3 sentences) explaining when you'd use this sentence.",
+    "  b) Say the sentence clearly.",
+    '  c) Invite: "Now you try. Go ahead."',
+    '  d) If correct: praise briefly ("Great!" / "Nice!" / "That\'s perfect.") and optionally ask "Say it again with confidence." or "Now a little faster."',
+    "  e) If incorrect: follow the correction flow below.",
+    "  f) Require 2-3 correct repetitions before moving on.",
+    "",
+    "--- Step B: Situation Practice ---",
+    "Use these situation seeds:",
+    situationList,
+    "",
+    "For EACH situation:",
+    '  a) Describe the situation in English. Ask the student to create a sentence using "' + verb.base_verb + '".',
+    "  b) If incorrect: follow the correction flow below.",
+    "  c) Ask for 2-3 correct repetitions.",
+    "",
+    "===== CORRECTION FLOW (ENGLISH ONLY) =====",
+    "When the student says something incorrect, use this structure:",
+    '  1. Acknowledge effort: "Good try."',
+    "  2. Explain briefly what was wrong (1-2 sentences max):",
+    "     e.g. \"You said 'I make dinner yesterday.' Since it already happened, we need past tense.\"",
+    "  3. Give the correct version: \"Say: 'I made dinner yesterday.'\"",
+    '  4. Ask to repeat: "Now repeat."',
+    "",
+    "===== TENSE COACHING =====",
+    "If a wrong tense is used, briefly contrast with mini scenarios:",
+    "  \"If it's a habit, say 'I make dinner every day.'",
+    "   If it happened yesterday, say 'I made dinner yesterday.'",
+    "   If it's happening now, say 'I am making dinner.'",
+    "   In our situation, it already finished. So say: 'I made dinner.'\"",
+    "Then ask to repeat.",
+    "",
+    "===== KOREAN INPUT HANDLING =====",
+    "If the student speaks Korean (or a mix of Korean and English):",
+    "- Do NOT ignore it. Infer the intended meaning.",
+    "- Reformulate in English:",
+    "  \"I think you mean: '<correct English sentence>'. Let's say it in English. Repeat: '<correct English sentence>'\"",
+    "- Never reply in Korean. Never translate to Korean.",
+    "",
+    "===== PRAISE BEHAVIOR =====",
+    "When correct, use short natural praise:",
+    '  "Great!" / "Nice!" / "That\'s perfect." / "Well done."',
+    "Sometimes add a follow-up:",
+    '  "Now say it a little faster." / "Say it again with confidence."',
+    "Do NOT overpraise. Only praise genuine correct English attempts.",
+    "",
+    "===== FEEDBACK LABELS =====",
+    "Use these feedback words:",
+    '  - "GREAT!" or "GOOD!" → correct/acceptable English attempt',
+    '  - "TRY AGAIN." → incorrect attempt',
+    "Do NOT use numeric scores, star ratings, percentages, or rubrics.",
+    "",
+    "===== FLOW RULES =====",
+    "- Keep responses SHORT and conversational (2-4 sentences).",
+    "- Do not over-explain. Keep momentum.",
+    "- If student struggles repeatedly, simplify the sentence.",
+    '- Always bring conversation back to practicing "' + verb.base_verb + '".',
+    "",
+    "===== COMPLETION =====",
+    'After completing ALL situations successfully, congratulate the student and say exactly "PRACTICE COMPLETE!" at the end.',
+  ].join("\n");
 }
 
 // ── Component ──
@@ -167,7 +188,7 @@ export default function SpeakingPractice() {
   const [showCorrections, setShowCorrections] = useState(false);
   const [correctionHistory, setCorrectionHistory] = useState<CorrectionEntry[]>(() => {
     try {
-      const stored = localStorage.getItem(`corrections_${assignmentId}`);
+      const stored = localStorage.getItem("corrections_" + assignmentId);
       return stored ? JSON.parse(stored) : [];
     } catch { return []; }
   });
@@ -176,6 +197,7 @@ export default function SpeakingPractice() {
   const totalAudioSecondsRef = useRef(0);
   const sessionStartRef = useRef(Date.now());
   const userMutedRef = useRef(false);
+  const silenceCountRef = useRef(0);
 
   // Hook — single source of truth for WebRTC
   const {
@@ -192,6 +214,13 @@ export default function SpeakingPractice() {
 
   const isConnected = connectionState === "connected";
   const isConnecting = connectionState === "connecting";
+
+  // Reset silence counter when speech is detected or AI starts speaking
+  useEffect(() => {
+    if (speechDetected || isAiSpeaking) {
+      silenceCountRef.current = 0;
+    }
+  }, [speechDetected, isAiSpeaking]);
 
   // ── Side effects ──
 
@@ -251,7 +280,7 @@ export default function SpeakingPractice() {
   const addCorrection = useCallback((entry: CorrectionEntry) => {
     setCorrectionHistory((prev) => {
       const updated = [...prev, entry];
-      try { localStorage.setItem(`corrections_${assignmentId}`, JSON.stringify(updated)); } catch {}
+      try { localStorage.setItem("corrections_" + assignmentId, JSON.stringify(updated)); } catch {}
       return updated;
     });
   }, [assignmentId]);
@@ -260,7 +289,6 @@ export default function SpeakingPractice() {
 
   const handleAiTranscript = useCallback((text: string) => {
     setTranscripts((prev) => [...prev, { role: "assistant", text, timestamp: Date.now() }]);
-    // Parse corrections
     const corrMatch = text.match(/CORRECTION:\s*(.+)/i);
     const youSaid = text.match(/You said:\s*(.+)/i);
     if (corrMatch && youSaid) {
@@ -272,14 +300,13 @@ export default function SpeakingPractice() {
   const handleUserTranscript = useCallback((text: string) => {
     totalAudioSecondsRef.current += 5;
     if (containsKorean(text)) {
-      console.log("[filter] Korean detected, sending English retry prompt");
-      sendUserText("The student spoke Korean. Ignore what they said. Say: 'Please speak in English. Let's try again.' Then repeat the current target sentence.");
+      console.log("[filter] Korean detected, inferring intent and prompting English");
+      sendUserText('The student said something in Korean: "' + text + '". Infer what they meant. Respond ONLY in English: "I think you mean: \'<correct English>\'. Let\'s say it in English. Repeat: \'<correct English>\'." Never use Korean.');
     }
     // User transcripts: internal only, not displayed
   }, [sendUserText]);
 
   const handleAiSpeakingEnd = useCallback(() => {
-    // Open mic after AI finishes (unless user manually muted)
     if (!userMutedRef.current) {
       setMicEnabled(true);
     }
@@ -292,12 +319,12 @@ export default function SpeakingPractice() {
     setUserMuted(false);
     userMutedRef.current = false;
     setTranscripts([]);
+    silenceCountRef.current = 0;
 
     const instructions = buildSystemInstructions(
       verbData,
       profile?.difficulty_level || "medium",
       profile?.speech_speed || "medium",
-      profile?.korean_hint_mode ?? false,
     );
 
     await connect({
@@ -310,7 +337,7 @@ export default function SpeakingPractice() {
       onUserTranscript: handleUserTranscript,
       onAiSpeakingEnd: handleAiSpeakingEnd,
       onReady: (send) => {
-        send("Start the lesson now. Introduce the verb and the first example sentence. Follow the lesson rules.");
+        send("Start the lesson now. Introduce the verb and the first example sentence with a vivid situation context. Follow the lesson rules.");
       },
     });
 
@@ -326,8 +353,16 @@ export default function SpeakingPractice() {
   }, [isAiSpeaking, userMuted, setMicEnabled]);
 
   const handleSilenceTimeout = useCallback(() => {
-    console.log("[silence] 3s timeout → sending re-guide prompt");
-    sendUserText("The student was silent for 3 seconds. Say: 'I didn't hear anything. Please try again.' Then repeat the current target sentence clearly.");
+    silenceCountRef.current += 1;
+    const count = silenceCountRef.current;
+    if (count === 1) {
+      console.log("[silence] 1s soft prompt");
+      sendUserText("The student is quiet. Give a SHORT soft encouragement (2-5 words only). Examples: 'Go ahead.' / 'You can do it.' / 'Keep going.' Do NOT repeat the sentence yet.");
+    } else {
+      console.log("[silence] 2s full re-guide");
+      silenceCountRef.current = 0;
+      sendUserText("The student is still silent. Say: \"Let's say it together.\" Then repeat the current target sentence clearly. Keep it encouraging.");
+    }
   }, [sendUserText]);
 
   const handleCompletion = async () => {
@@ -388,7 +423,7 @@ export default function SpeakingPractice() {
               <History className="h-4 w-4" />
             </Button>
           )}
-          <Badge variant="outline" className={`rounded-full text-xs ${isConnected ? "border-secondary text-secondary" : connectionState === "error" ? "border-destructive text-destructive" : ""}`}>
+          <Badge variant="outline" className={"rounded-full text-xs " + (isConnected ? "border-secondary text-secondary" : connectionState === "error" ? "border-destructive text-destructive" : "")}>
             {connectionState}
           </Badge>
           {isComplete && (
@@ -404,17 +439,17 @@ export default function SpeakingPractice() {
         {/* Status orb */}
         {(isConnected || isConnecting) && (
           <div className="flex justify-center py-6">
-            <div className={`relative w-32 h-32 rounded-full flex items-center justify-center transition-all duration-500 ${
+            <div className={"relative w-32 h-32 rounded-full flex items-center justify-center transition-all duration-500 " + (
               isAiSpeaking ? "bg-accent/20 shadow-[0_0_40px_hsl(var(--accent)/0.3)]"
                 : isConnected ? "bg-secondary/20 shadow-[0_0_40px_hsl(var(--secondary)/0.3)]"
                 : "bg-primary/20 animate-pulse"
-            }`}>
+            )}>
               <span className="text-4xl">{isConnected ? (isAiSpeaking ? "🔊" : "🎤") : "⏳"}</span>
               {isConnected && isAiSpeaking && <div className="absolute inset-0 rounded-full border-2 border-accent/40 animate-ping" />}
             </div>
             {isConnected && (
               <div className="absolute mt-36 text-center">
-                <span className={`text-xs font-bold ${isAiSpeaking ? "text-accent" : "text-secondary"}`}>
+                <span className={"text-xs font-bold " + (isAiSpeaking ? "text-accent" : "text-secondary")}>
                   {isAiSpeaking ? "🔊 Teacher speaking…" : "🎤 Your turn — speak now!"}
                 </span>
               </div>
@@ -457,20 +492,13 @@ export default function SpeakingPractice() {
 
         {/* AI Subtitles only */}
         {transcripts.filter((t) => t.role === "assistant").map((t, i) => {
-          let mainText = t.text;
-          let koreanHint: string | null = null;
-          const koMatch = t.text.match(/\[KO:\s*(.+?)\]/);
-          if (koMatch) {
-            koreanHint = koMatch[1];
-            mainText = t.text.replace(/\[KO:\s*.+?\]/g, "").trim();
-          }
+          const mainText = t.text;
           return (
             <div key={i} className="flex justify-start">
               <Card className="max-w-[85%] rounded-2xl kid-shadow">
                 <CardContent className="pt-3 pb-3 px-4">
                   <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
                   <p className="text-base whitespace-pre-wrap">{mainText}</p>
-                  {koreanHint && <p className="text-sm text-muted-foreground mt-1 border-t pt-1">🇰🇷 {koreanHint}</p>}
                 </CardContent>
               </Card>
             </div>
@@ -479,10 +507,10 @@ export default function SpeakingPractice() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Silence Timer — real behavior */}
+      {/* Silence Timer — 1s tiered behavior */}
       {isConnected && !userMuted && !isAiSpeaking && !speechDetected && (
         <div className="flex justify-center pb-2">
-          <SilenceTimer active durationMs={3000} onTimeout={handleSilenceTimeout} />
+          <SilenceTimer active durationMs={1000} onTimeout={handleSilenceTimeout} />
         </div>
       )}
 
