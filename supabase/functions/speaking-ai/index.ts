@@ -35,11 +35,15 @@ serve(async (req) => {
       systemPrompt = levelPreamble + englishOnlyRule + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone.
 
 The student is learning the verb: "${verb_data.verb}"
-Meaning: ${verb_data.meaning_en}
+
+IMPORTANT: Do NOT translate or define the word directly. Instead, introduce it through a vivid scenario.
 
 Your task:
-1. Briefly explain what "${verb_data.verb}" means in simple English
-2. Give these example sentences one by one:
+1. Create a short vivid scenario (3-5 sentences) using concrete actions, people, and everyday situations that clearly illustrate the meaning of "${verb_data.verb}".
+   - Use gestures, simple actions, and visual descriptions.
+   - Then naturally introduce the target word inside the scenario.
+   - Ask the student: "What do you think '${verb_data.verb}' means?" (in English).
+2. After the student responds, confirm or gently guide them, then give these example sentences one by one:
    - ${verb_data.anchor_short_1 || ""}
    - ${verb_data.anchor_short_2 || ""}
    - ${verb_data.anchor_short_3 || ""}
@@ -48,7 +52,7 @@ Your task:
    - ${verb_data.anchor_long_2 || ""}
    - ${verb_data.anchor_long_3 || ""}
 
-Keep it short, friendly, and encouraging. Use simple words. Add emoji occasionally.`;
+Keep it energetic and expressive. No definitions. No translations.`;
 
     } else if (action === "situation") {
       const situations = [
