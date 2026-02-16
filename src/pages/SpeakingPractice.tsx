@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { ArrowLeft, Mic, MicOff, PhoneOff, CheckCircle, History } from "lucide-react";
 import { formatVerbKey } from "@/lib/formatVerbKey";
-import { type CorrectionEntry, type FeedbackLevel } from "@/lib/evaluateAttempt";
+import { type CorrectionEntry } from "@/lib/evaluateAttempt";
 import SilenceTimer from "@/components/SilenceTimer";
 
 type VerbData = {
@@ -303,6 +303,26 @@ export default function SpeakingPractice() {
     }
   }, [addCorrection]);
 
+  // Send a coaching prompt to AI via data channel and trigger AI response
+  const sendCoachPrompt = useCallback((text: string) => {
+    const dc = dcRef.current;
+    if (!dc || dc.readyState !== "open") return;
+    // Mute mic while AI will speak
+    const trk = streamRef.current?.getAudioTracks()[0];
+    if (trk) trk.enabled = false;
+    dc.send(JSON.stringify({
+      type: "conversation.item.create",
+      item: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text }],
+      },
+    }));
+    dc.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio", "text"] } }));
+    setAiSpeaking(true);
+    setSpeechDetected(false);
+  }, []);
+
   const connect = useCallback(async () => {
     if (!verbData) return;
     perf("start_click");
@@ -400,8 +420,16 @@ export default function SpeakingPractice() {
 
       dc.onopen = () => {
         perf("dc_open");
-        // Trigger AI to speak immediately
-        dc.send(JSON.stringify({ type: "response.create" }));
+        // Trigger AI to speak immediately WITH content
+        dc.send(JSON.stringify({
+          type: "conversation.item.create",
+          item: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Start the lesson now. Introduce the verb and the first example sentence. Follow the lesson rules." }],
+          },
+        }));
+        dc.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio", "text"] } }));
         perf("first_ai_request_sent");
       };
 
@@ -449,9 +477,16 @@ export default function SpeakingPractice() {
             firstChunkLogged = false;
           }
 
+          // User transcript: filter Korean, don't display
           if (event.type === "conversation.item.input_audio_transcription.completed" && event.transcript) {
-            addTranscript("user", event.transcript.trim());
+            const txt = event.transcript.trim();
             totalAudioSecondsRef.current += 5;
+            if (containsKorean(txt)) {
+              // Korean detected → ignore content, send English retry prompt
+              console.log("[filter] Korean detected, sending English retry prompt");
+              sendCoachPrompt("The student spoke Korean. Ignore what they said. Say: 'Please speak in English. Let's try again.' Then repeat the current target sentence.");
+            }
+            // Do NOT add user transcript to UI display (internal only)
           }
         } catch {}
       };
@@ -715,7 +750,14 @@ export default function SpeakingPractice() {
       {/* Silence Timer */}
       {isConnected && !userMuted && !aiSpeaking && !speechDetected && (
         <div className="flex justify-center pb-2">
-          <SilenceTimer active durationMs={3000} />
+          <SilenceTimer
+            active
+            durationMs={3000}
+            onTimeout={() => {
+              console.log("[silence] 3s timeout → sending re-guide prompt");
+              sendCoachPrompt("The student was silent for 3 seconds. Say: 'I didn't hear anything. Please try again.' Then repeat the current target sentence clearly.");
+            }}
+          />
         </div>
       )}
 
