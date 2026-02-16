@@ -144,7 +144,7 @@ export function useRealtimeWebRTC() {
           },
           body: JSON.stringify({
             voice: options.voice || "alloy",
-            instructions: options.instructions || "You are a friendly English tutor.",
+            instructions: options.instructions || "You are an energetic English teacher. You must speak only in English. Never use Korean. Never translate into Korean.",
             turn_detection: options.turnDetection || { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 3000 },
             input_audio_transcription: options.inputAudioTranscription || { model: "gpt-4o-mini-transcribe" },
             speed: options.speed || "medium",
