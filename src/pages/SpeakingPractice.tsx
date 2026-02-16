@@ -159,7 +159,7 @@ export default function SpeakingPractice() {
 
   const [verbData, setVerbData] = useState<VerbData | null>(null);
   const [connectionState, setConnectionState] = useState<"idle" | "connecting" | "connected" | "error">("idle");
-  const [isMuted, setIsMuted] = useState(false);
+  const [userMuted, setUserMuted] = useState(false); // ONLY true when user manually mutes
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [speechDetected, setSpeechDetected] = useState(false);
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
@@ -199,10 +199,7 @@ export default function SpeakingPractice() {
     const track = stream.getAudioTracks()[0];
     if (track) {
       track.enabled = enabled;
-      // Only show red mute button if user manually muted, NOT during AI speech
-      // isMuted reflects manual user mute state, not AI-controlled mute
       if (enabled) {
-        setIsMuted(false);
         setSpeechDetected(false);
         perf("t_start_listening");
       }
@@ -384,6 +381,13 @@ export default function SpeakingPractice() {
       const dc = pc.createDataChannel("oai-events");
       dcRef.current = dc;
 
+      // When data channel opens, trigger immediate AI greeting
+      dc.onopen = () => {
+        perf("t_dc_open");
+        dc.send(JSON.stringify({ type: "response.create" }));
+        perf("t_ai_request_sent");
+      };
+
       dc.onmessage = (e) => {
         try {
           const event = JSON.parse(e.data);
@@ -460,6 +464,9 @@ export default function SpeakingPractice() {
       sessionStartTimeRef.current = Date.now();
       perf("t_session_connected");
 
+      // Ensure audio plays (needed for some browsers)
+      try { await audio.play(); } catch { /* autoplay may handle it */ }
+
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
           setConnectionState("error");
@@ -486,16 +493,16 @@ export default function SpeakingPractice() {
     dcRef.current = null;
     audioRef.current = null;
     setConnectionState("idle");
-    setIsMuted(false);
+    setUserMuted(false);
   }, []);
 
   const toggleMute = useCallback(() => {
     const stream = streamRef.current;
-    if (!stream || aiSpeaking) return; // Don't allow unmute while AI speaking
+    if (!stream || aiSpeaking) return;
     const track = stream.getAudioTracks()[0];
     if (track) {
       track.enabled = !track.enabled;
-      setIsMuted(!track.enabled);
+      setUserMuted(!track.enabled);
     }
   }, [aiSpeaking]);
 
@@ -656,7 +663,7 @@ export default function SpeakingPractice() {
           <div className="text-center text-destructive font-semibold">{error}</div>
         )}
 
-        {isConnected && isMuted && (
+        {isConnected && userMuted && (
           <div className="text-center text-sm text-destructive font-semibold">🔇 Microphone muted — tap mic button to unmute</div>
         )}
 
@@ -687,7 +694,7 @@ export default function SpeakingPractice() {
       </div>
 
       {/* Silence Timer */}
-      {isConnected && !isMuted && !aiSpeaking && !speechDetected && (
+      {isConnected && !userMuted && !aiSpeaking && !speechDetected && (
         <div className="flex justify-center pb-2">
           <SilenceTimer active durationMs={3000} />
         </div>
@@ -707,11 +714,11 @@ export default function SpeakingPractice() {
           <div className="flex gap-3 justify-center">
             <Button
               onClick={toggleMute}
-              variant={isMuted ? "destructive" : "outline"}
+              variant={userMuted ? "destructive" : "outline"}
               className="h-16 w-16 rounded-2xl kid-shadow"
               disabled={!isConnected || aiSpeaking}
             >
-              {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+              {userMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
             </Button>
             <Button
               onClick={() => { disconnect(); navigate("/"); }}
