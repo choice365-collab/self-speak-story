@@ -22,7 +22,7 @@ serve(async (req) => {
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("id, student_id, display_name")
-        .eq("student_id", login_id)
+        .ilike("student_id", login_id)
         .eq("role", "student")
         .single();
 
@@ -75,7 +75,7 @@ serve(async (req) => {
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("id, admin_id, display_name")
-        .eq("admin_id", login_id)
+        .ilike("admin_id", login_id)
         .eq("role", "admin")
         .single();
 
