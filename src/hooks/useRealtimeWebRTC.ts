@@ -292,29 +292,27 @@ export function useRealtimeWebRTC() {
             if (mic) mic.enabled = true;
           }
 
-          // ── Student speech ended → trigger AI response ──
+          // ── Student speech ended ──
+          // Server VAD has create_response:true, so it auto-creates a response.
+          // We do NOT send response.create here to avoid double responses.
+          // Just update state to AI_SPEAKING and mute mic.
           if (type === "input_audio_buffer.speech_stopped") {
-            if (convStateRef.current !== "AI_SPEAKING" && !responseInFlightRef.current) {
-              const d = dcRef.current;
-              if (d && d.readyState === "open") {
-                console.log(`[debug] SENT_RESPONSE_CREATE (speech_stopped) t=${Date.now()}`);
-                d.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio", "text"] } }));
-                responseInFlightRef.current = true;
-                audioActiveRef.current = false;
-                responseDoneRef.current = false;
-                setConvState("AI_SPEAKING");
-                // Mute mic
-                const mic = streamRef.current?.getAudioTracks()[0];
-                if (mic) mic.enabled = false;
-                // Fail-safe
-                clearAllTimers();
-                failSafeTimerRef.current = setTimeout(() => {
-                  if (responseInFlightRef.current && !audioActiveRef.current) {
-                    console.warn(`[debug] FAILSAFE_RELEASE (speech_stopped no delta) t=${Date.now()}`);
-                    finishAiTurn();
-                  }
-                }, 5000);
-              }
+            console.log(`[debug] SPEECH_STOPPED t=${Date.now()}`);
+            if (!responseInFlightRef.current) {
+              responseInFlightRef.current = true;
+              audioActiveRef.current = false;
+              responseDoneRef.current = false;
+              setConvState("AI_SPEAKING");
+              const mic = streamRef.current?.getAudioTracks()[0];
+              if (mic) mic.enabled = false;
+              // Fail-safe in case server VAD doesn't produce a response
+              clearAllTimers();
+              failSafeTimerRef.current = setTimeout(() => {
+                if (responseInFlightRef.current && !audioActiveRef.current) {
+                  console.warn(`[debug] FAILSAFE_RELEASE (speech_stopped no response) t=${Date.now()}`);
+                  finishAiTurn();
+                }
+              }, 5000);
             }
           }
 
