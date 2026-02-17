@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 
 export type RealtimeStatus = "idle" | "connecting" | "connected" | "error";
 
+export type ConversationState = "IDLE" | "AI_SPEAKING" | "STUDENT_LISTENING";
+
 export type TranscriptEntry = {
   role: "user" | "assistant";
   text: string;
@@ -20,20 +22,19 @@ type ConnectOptions = {
   onUserTranscript?: (text: string) => void;
   /** Called right after data channel opens — send initial prompt here */
   onReady?: (sendText: (text: string) => void) => void;
-  /** Called when AI starts speaking */
-  onAiSpeakingStart?: () => void;
-  /** Called when AI finishes speaking */
-  onAiSpeakingEnd?: () => void;
+  /** Called when conversation state changes */
+  onStateChange?: (state: ConversationState) => void;
 };
 
 /**
  * Single source of truth for OpenAI Realtime WebRTC.
  * Manages: mic stream, RTCPeerConnection, data channel, audio output.
+ * Uses a strict conversation state machine: IDLE → AI_SPEAKING ↔ STUDENT_LISTENING
  */
 export function useRealtimeWebRTC() {
   const [status, setStatus] = useState<RealtimeStatus>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [isAiSpeaking, setIsAiSpeaking] = useState(false);
+  const [conversationState, setConversationState] = useState<ConversationState>("IDLE");
   const [speechDetected, setSpeechDetected] = useState(false);
   const responseInFlightRef = useRef(false);
 
@@ -44,6 +45,15 @@ export function useRealtimeWebRTC() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const callbacksRef = useRef<ConnectOptions>({});
   const perfRef = useRef<Record<string, number>>({});
+  // Ref mirror of conversationState for use in closures
+  const convStateRef = useRef<ConversationState>("IDLE");
+
+  const setConvState = useCallback((state: ConversationState) => {
+    convStateRef.current = state;
+    setConversationState(state);
+    callbacksRef.current.onStateChange?.(state);
+    console.log(`[state] conversationState → ${state}`);
+  }, []);
 
   // Perf logging
   const perf = useCallback((label: string) => {
@@ -59,7 +69,6 @@ export function useRealtimeWebRTC() {
     if (existing && existing.getAudioTracks().length > 0 && existing.getAudioTracks()[0].readyState !== "ended") {
       return existing;
     }
-    // Check permission first
     try {
       const perm = await navigator.permissions.query({ name: "microphone" as PermissionName });
       if (perm.state === "denied") {
@@ -89,13 +98,14 @@ export function useRealtimeWebRTC() {
     }
   }, []);
 
-  // ── Send text via data channel ──
+  // ── Send text via data channel (guarded by state machine) ──
 
   const sendUserText = useCallback((text: string) => {
     const dc = dcRef.current;
     if (!dc || dc.readyState !== "open") return;
-    if (responseInFlightRef.current) {
-      console.log("[guard] response already in flight, skipping sendUserText");
+    // Guard: never send while AI is speaking or response already in flight
+    if (convStateRef.current === "AI_SPEAKING" || responseInFlightRef.current) {
+      console.log("[guard] blocked sendUserText — state:", convStateRef.current, "inFlight:", responseInFlightRef.current);
       return;
     }
     // Mute mic — AI will speak
@@ -106,9 +116,9 @@ export function useRealtimeWebRTC() {
     }));
     dc.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio", "text"] } }));
     responseInFlightRef.current = true;
-    setIsAiSpeaking(true);
+    setConvState("AI_SPEAKING");
     setSpeechDetected(false);
-  }, [setMicEnabled]);
+  }, [setMicEnabled, setConvState]);
 
   // ── Connect ──
 
@@ -205,19 +215,22 @@ export function useRealtimeWebRTC() {
             setSpeechDetected(true);
             perf("speech_detected");
 
-            // If AI is speaking, immediately stop playback
-            if (audioRef.current?.srcObject) {
-              audioRef.current.pause();
-              audioRef.current.srcObject = null;
+            // If AI is speaking, immediately stop playback and cancel
+            if (convStateRef.current === "AI_SPEAKING") {
+              if (audioRef.current?.srcObject) {
+                audioRef.current.pause();
+                audioRef.current.srcObject = null;
+              }
+              // Cancel in-flight response server-side
+              const truncateDc = dcRef.current;
+              if (truncateDc && truncateDc.readyState === "open") {
+                truncateDc.send(JSON.stringify({ type: "response.cancel" }));
+              }
+              responseInFlightRef.current = false;
             }
-            setIsAiSpeaking(false);
-            responseInFlightRef.current = false;
 
-            // Truncate the in-flight AI response via data channel
-            const truncateDc = dcRef.current;
-            if (truncateDc && truncateDc.readyState === "open") {
-              truncateDc.send(JSON.stringify({ type: "response.cancel" }));
-            }
+            // Transition to STUDENT_LISTENING
+            setConvState("STUDENT_LISTENING");
 
             // Ensure mic is fully open for student
             const micTrack = streamRef.current?.getAudioTracks()[0];
@@ -226,17 +239,18 @@ export function useRealtimeWebRTC() {
 
           if (type === "input_audio_buffer.speech_stopped") {
             perf("end_of_speech");
-            // Only request AI response if none is already in flight
-            if (!responseInFlightRef.current) {
+            // Only request AI response if state allows and nothing in flight
+            if (convStateRef.current !== "AI_SPEAKING" && !responseInFlightRef.current) {
               const respDc = dcRef.current;
               if (respDc && respDc.readyState === "open") {
                 respDc.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio", "text"] } }));
                 responseInFlightRef.current = true;
+                setConvState("AI_SPEAKING");
               }
             }
           }
 
-          // AI audio chunk
+          // AI audio chunk — confirms AI_SPEAKING
           if (type === "response.audio.delta") {
             if (!firstChunkLogged) { perf("first_tts_chunk_received"); firstChunkLogged = true; }
             // Re-attach audio if cleared by barge-in
@@ -244,26 +258,29 @@ export function useRealtimeWebRTC() {
               audioRef.current.srcObject = remoteStreamRef.current;
               audioRef.current.play().catch(() => {});
             }
-            setIsAiSpeaking(true);
+            // Ensure we're in AI_SPEAKING
+            if (convStateRef.current !== "AI_SPEAKING") {
+              setConvState("AI_SPEAKING");
+            }
             setSpeechDetected(false);
             // Ensure mic off while AI speaks
             const trk = streamRef.current?.getAudioTracks()[0];
             if (trk) trk.enabled = false;
-            callbacksRef.current.onAiSpeakingStart?.();
           }
 
-          // AI transcript done
+          // AI transcript done — only add subtitle if still in AI_SPEAKING
           if (type === "response.audio_transcript.done" && event.transcript) {
-            callbacksRef.current.onAiTranscript?.(event.transcript.trim());
+            if (convStateRef.current === "AI_SPEAKING") {
+              callbacksRef.current.onAiTranscript?.(event.transcript.trim());
+            }
           }
 
-          // AI response done → open mic
+          // AI response done → transition to STUDENT_LISTENING
           if (type === "response.done") {
-            setIsAiSpeaking(false);
             responseInFlightRef.current = false;
             perf("tts_play_ended");
             firstChunkLogged = false;
-            callbacksRef.current.onAiSpeakingEnd?.();
+            setConvState("STUDENT_LISTENING");
           }
 
           // User transcript
@@ -286,6 +303,7 @@ export function useRealtimeWebRTC() {
 
       await pc.setRemoteDescription({ type: "answer", sdp: await sdpRes.text() });
       setStatus("connected");
+      setConvState("AI_SPEAKING"); // AI speaks first
       perf("session_connected");
 
       pc.onconnectionstatechange = () => {
@@ -299,7 +317,7 @@ export function useRealtimeWebRTC() {
       setStatus("error");
       setError(e.message || "Failed to connect");
     }
-  }, [ensureMic, perf, sendUserText]);
+  }, [ensureMic, perf, sendUserText, setConvState]);
 
   // ── Disconnect ──
 
@@ -313,8 +331,9 @@ export function useRealtimeWebRTC() {
     dcRef.current = null;
     audioRef.current = null;
     responseInFlightRef.current = false;
+    convStateRef.current = "IDLE";
     setStatus("idle");
-    setIsAiSpeaking(false);
+    setConversationState("IDLE");
     setSpeechDetected(false);
   }, []);
 
@@ -324,7 +343,8 @@ export function useRealtimeWebRTC() {
   return {
     status,
     error,
-    isAiSpeaking,
+    conversationState,
+    isAiSpeaking: conversationState === "AI_SPEAKING",
     speechDetected,
     connect,
     disconnect,
