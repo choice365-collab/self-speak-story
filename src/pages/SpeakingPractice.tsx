@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { ArrowLeft, Mic, MicOff, PhoneOff, CheckCircle, History } from "lucide-react";
 import { formatVerbKey } from "@/lib/formatVerbKey";
 import { type CorrectionEntry } from "@/lib/evaluateAttempt";
-import SilenceTimer from "@/components/SilenceTimer";
 import { useRealtimeWebRTC, type TranscriptEntry } from "@/hooks/useRealtimeWebRTC";
 
 // ── Types ──
@@ -81,11 +80,6 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "2) Introduce the target sentence using a vivid situation in simple English (2-4 sentences).",
     "   Do NOT define or translate.",
     "   Help the student guess meaning from context.",
-    "   Example style:",
-    '   "Imagine you just finished cooking dinner for your family.',
-    "    Everyone is sitting at the table waiting.",
-    "    Your mom asks what you did.",
-    "    In that situation, you can say: 'I made dinner.'\"",
     "3) Clearly model the sentence once.",
     '   Then say: "Your turn. Go ahead."',
     "",
@@ -95,33 +89,15 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "Situation seeds:",
     sitList,
     "",
-    "SILENCE HANDLING:",
-    "- Do NOT speak after only 1 second of silence. Wait at least 3 seconds.",
-    "- Only intervene if the student is silent for 3 seconds or longer.",
-    "- When 3+ seconds of silence happens, use ONE of these strategies (rotate — never repeat the same one twice in a row):",
-    "  A) Re-state the situation context in a fresh way (1-2 sentences), then model the sentence.",
-    "  B) Give a tiny hint (1 sentence) about the key word or tense, then model the sentence.",
-    '  C) Say the model sentence slowly once, then ask: "Now you try."',
-    '  D) Offer a choice: "Do you want to say it slowly or quickly? Let\'s go — repeat: \'<sentence>\'."',
-    '- After any prompt, always end with: "Repeat: \'<correct sentence>\'."',
-    "- Keep it energetic but natural. No nagging. No repeated motivational catchphrases.",
-    "- If the student stays silent again for another 3 seconds, intervene again but MUST use a different strategy than last time.",
-    "",
     "CORRECTION RULE (VERY IMPORTANT):",
     "If the student makes a mistake, you MUST follow this 4-part structure:",
     '(A) Short encouragement: "Nice try!" / "Good attempt!"',
     "(B) Explain the main mistake briefly (1-2 short sentences only).",
-    "    Focus on ONE main issue: tense, word order, missing word, wrong verb form, or off-topic.",
     '(C) Give the corrected sentence clearly: "Correct: [sentence]"',
     '(D) Ask for repetition: "Now repeat: [sentence]"',
-    'Do NOT say only "Try again." Do NOT give long grammar lectures. Keep it short and clear.',
     "",
     "TENSE COACHING:",
-    "If tense is wrong, briefly contrast:",
-    '- Present (habit): "I make dinner every day."',
-    '- Past (finished): "I made dinner yesterday."',
-    '- Continuous (happening now): "I am making dinner now."',
-    "Then clearly state which one fits the situation and ask the student to repeat.",
+    "If tense is wrong, briefly contrast the correct tense and ask the student to repeat.",
     "",
     "MIXED KOREAN HANDLING:",
     "If the student mixes Korean:",
@@ -132,7 +108,6 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "",
     "PRAISE WHEN CORRECT:",
     '- Use short energetic praise: "Great!" / "Perfect!" / "Nice job!"',
-    '- Optionally: "Say it again with confidence!"',
     "- Stay energetic and keep the conversation flowing naturally.",
     "",
     "Require 2-3 correct repetitions per sentence before moving on.",
@@ -151,6 +126,7 @@ export default function SpeakingPractice() {
   const [verbData, setVerbData] = useState<VerbData | null>(null);
   const [isComplete, setIsComplete] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [userMuted, setUserMuted] = useState(false);
   const [showCorrections, setShowCorrections] = useState(false);
@@ -165,37 +141,27 @@ export default function SpeakingPractice() {
   const totalAudioSecondsRef = useRef(0);
   const sessionStartRef = useRef(Date.now());
   const userMutedRef = useRef(false);
-  const silenceCountRef = useRef(0);
+  const streamingTextRef = useRef("");
 
-  // Hook — single source of truth for WebRTC
+  // Hook
   const {
     status: connectionState,
     error,
-    conversationState,
     isAiSpeaking,
-    speechDetected,
     connect,
     disconnect,
     setMicEnabled,
-    setSpeakerMuted,
     sendUserText,
   } = useRealtimeWebRTC();
 
   const isConnected = connectionState === "connected";
   const isConnecting = connectionState === "connecting";
 
-  // Reset silence counter when speech is detected or AI starts speaking
-  useEffect(() => {
-    if (speechDetected || conversationState === "AI_SPEAKING") {
-      silenceCountRef.current = 0;
-    }
-  }, [speechDetected, conversationState]);
-
   // ── Side effects ──
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [transcripts]);
+  }, [transcripts, streamingText]);
 
   useEffect(() => {
     loadAssignment();
@@ -254,10 +220,20 @@ export default function SpeakingPractice() {
     });
   }, [assignmentId]);
 
-  // ── Callbacks for the hook ──
+  // ── Callbacks ──
 
-  const handleAiTranscript = useCallback((text: string) => {
+  const handleAiTextDelta = useCallback((delta: string) => {
+    streamingTextRef.current += delta;
+    setStreamingText(streamingTextRef.current);
+  }, []);
+
+  const handleAiTranscriptDone = useCallback((text: string) => {
+    // Finalize: move streaming text into transcripts
     setTranscripts((prev) => [...prev, { role: "assistant", text, timestamp: Date.now() }]);
+    setStreamingText("");
+    streamingTextRef.current = "";
+
+    // Check for corrections
     const corrMatch = text.match(/CORRECTION:\s*(.+)/i);
     const youSaid = text.match(/You said:\s*(.+)/i);
     if (corrMatch && youSaid) {
@@ -269,17 +245,9 @@ export default function SpeakingPractice() {
   const handleUserTranscript = useCallback((text: string) => {
     totalAudioSecondsRef.current += 5;
     if (containsKorean(text)) {
-      console.log("[filter] Korean detected, inferring intent and prompting English");
-      sendUserText('The student said something in Korean: "' + text + '". Infer what they meant. Respond ONLY in English: "I think you mean: \'<correct English>\'. Let\'s say it in English. Repeat: \'<correct English>\'." Never use Korean.');
+      sendUserText('The student said something in Korean: "' + text + '". Infer what they meant. Respond ONLY in English.');
     }
-    // User transcripts: internal only, not displayed
   }, [sendUserText]);
-
-  const handleStateChange = useCallback((state: string) => {
-    if (state === "STUDENT_LISTENING" && !userMutedRef.current) {
-      setMicEnabled(true);
-    }
-  }, [setMicEnabled]);
 
   // ── Actions ──
 
@@ -288,7 +256,8 @@ export default function SpeakingPractice() {
     setUserMuted(false);
     userMutedRef.current = false;
     setTranscripts([]);
-    silenceCountRef.current = 0;
+    setStreamingText("");
+    streamingTextRef.current = "";
 
     const instructions = buildSystemInstructions(
       verbData,
@@ -302,16 +271,21 @@ export default function SpeakingPractice() {
       turnDetection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 3000 },
       inputAudioTranscription: { model: "gpt-4o-mini-transcribe" },
       speed: profile?.speech_speed || "medium",
-      onAiTranscript: handleAiTranscript,
+      onAiTextDelta: handleAiTextDelta,
+      onAiTranscriptDone: handleAiTranscriptDone,
       onUserTranscript: handleUserTranscript,
-      onStateChange: handleStateChange,
+      onStateChange: (state) => {
+        if (state === "IDLE" && !userMutedRef.current) {
+          setMicEnabled(true);
+        }
+      },
       onReady: (send) => {
         send("Start the lesson now. Introduce the verb and the first example sentence with a vivid situation context. Follow the lesson rules.");
       },
     });
 
     sessionStartRef.current = Date.now();
-  }, [verbData, profile, connect, handleAiTranscript, handleUserTranscript, handleStateChange]);
+  }, [verbData, profile, connect, handleAiTextDelta, handleAiTranscriptDone, handleUserTranscript, setMicEnabled]);
 
   const toggleMute = useCallback(() => {
     if (isAiSpeaking) return;
@@ -320,14 +294,6 @@ export default function SpeakingPractice() {
     userMutedRef.current = next;
     setMicEnabled(!next);
   }, [isAiSpeaking, userMuted, setMicEnabled]);
-
-  const handleSilenceTimeout = useCallback(() => {
-    // Guard: only prompt during STUDENT_LISTENING
-    if (conversationState !== "STUDENT_LISTENING") return;
-    silenceCountRef.current += 1;
-    console.log("[silence] 3s re-engagement #" + silenceCountRef.current);
-    sendUserText("The student has been silent for 3+ seconds. Use one of the rotation strategies (A/B/C/D) from your silence-handling instructions. Do NOT repeat the same strategy you used last time. Keep it short and end with 'Repeat: <sentence>'. Do NOT use repeated motivational catchphrases.");
-  }, [sendUserText, conversationState]);
 
   const handleCompletion = async () => {
     setIsComplete(true);
@@ -454,29 +420,32 @@ export default function SpeakingPractice() {
           <div className="text-center text-sm text-destructive font-semibold">🔇 Microphone muted — tap mic button to unmute</div>
         )}
 
-        {/* AI Subtitles only */}
-        {transcripts.filter((t) => t.role === "assistant").map((t, i) => {
-          const mainText = t.text;
-          return (
-            <div key={i} className="flex justify-start">
-              <Card className="max-w-[85%] rounded-2xl kid-shadow">
-                <CardContent className="pt-3 pb-3 px-4">
-                  <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
-                  <p className="text-base whitespace-pre-wrap">{mainText}</p>
-                </CardContent>
-              </Card>
-            </div>
-          );
-        })}
+        {/* AI Subtitles — finalized */}
+        {transcripts.filter((t) => t.role === "assistant").map((t, i) => (
+          <div key={i} className="flex justify-start">
+            <Card className="max-w-[85%] rounded-2xl kid-shadow">
+              <CardContent className="pt-3 pb-3 px-4">
+                <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
+                <p className="text-base whitespace-pre-wrap">{t.text}</p>
+              </CardContent>
+            </Card>
+          </div>
+        ))}
+
+        {/* Streaming subtitle (current AI speech) */}
+        {streamingText && (
+          <div className="flex justify-start">
+            <Card className="max-w-[85%] rounded-2xl kid-shadow border-accent/30">
+              <CardContent className="pt-3 pb-3 px-4">
+                <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
+                <p className="text-base whitespace-pre-wrap">{streamingText}<span className="animate-pulse">▌</span></p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
-
-      {/* Silence Timer — ONLY active when truly in STUDENT_LISTENING and no AI audio */}
-      {isConnected && !userMuted && conversationState === "STUDENT_LISTENING" && !isAiSpeaking && !speechDetected && (
-        <div className="flex justify-center pb-2">
-          <SilenceTimer active durationMs={3000} onTimeout={handleSilenceTimeout} />
-        </div>
-      )}
 
       {/* Controls */}
       <div className="border-t p-4">
