@@ -55,6 +55,7 @@ export function useRealtimeWebRTC() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const callbacksRef = useRef<ConnectOptions>({});
   const convStateRef = useRef<ConversationState>("IDLE");
+  const pendingTranscriptsRef = useRef<string[]>([]);
 
   // ── Helpers ──
 
@@ -84,6 +85,13 @@ export function useRealtimeWebRTC() {
     if (trk) trk.enabled = true;
     setSpeechDetected(false);
     console.log(`[debug] AUDIO_TAIL_LISTENING t=${Date.now()}`);
+
+    // Flush buffered transcripts after audio finishes
+    const pending = pendingTranscriptsRef.current;
+    if (pending.length > 0) {
+      pendingTranscriptsRef.current = [];
+      pending.forEach((t) => callbacksRef.current.onAiTranscript?.(t));
+    }
   }, [clearAllTimers, setConvState]);
 
   /** Start the tail checker interval — runs every 100ms */
@@ -352,10 +360,10 @@ export function useRealtimeWebRTC() {
             if (mic) mic.enabled = false;
           }
 
-          // ── AI transcript ──
+          // ── AI transcript — buffer until audio finishes ──
           if (type === "response.audio_transcript.done" && ev.transcript) {
-            console.log(`[debug] GOT_AI_TRANSCRIPT t=${Date.now()}`);
-            callbacksRef.current.onAiTranscript?.(ev.transcript.trim());
+            console.log(`[debug] GOT_AI_TRANSCRIPT (buffered) t=${Date.now()}`);
+            pendingTranscriptsRef.current.push(ev.transcript.trim());
           }
 
           // ── response.done: transition to STUDENT_LISTENING ──
