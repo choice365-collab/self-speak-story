@@ -321,17 +321,12 @@ export default function SpeakingPractice() {
   }, [isAiSpeaking, userMuted, setMicEnabled]);
 
   const handleSilenceTimeout = useCallback(() => {
+    // Guard: never prompt while AI is speaking
+    if (isAiSpeaking) return;
     silenceCountRef.current += 1;
-    const count = silenceCountRef.current;
-    if (count === 1) {
-      console.log("[silence] 1s soft prompt");
-      sendUserText("The student is quiet. Give a SHORT soft encouragement (2-5 words only). Examples: 'Go ahead.' / 'You can do it.' / 'Keep going.' Do NOT repeat the sentence yet.");
-    } else {
-      console.log("[silence] 2s full re-guide");
-      silenceCountRef.current = 0;
-      sendUserText("The student is still silent. Say: \"Let's say it together.\" Then repeat the current target sentence clearly. Keep it encouraging.");
-    }
-  }, [sendUserText]);
+    console.log("[silence] 3s re-engagement #" + silenceCountRef.current);
+    sendUserText("The student has been silent for 3+ seconds. Use one of the rotation strategies (A/B/C/D) from your silence-handling instructions. Do NOT repeat the same strategy you used last time. Keep it short and end with 'Repeat: <sentence>'. Do NOT use repeated motivational catchphrases.");
+  }, [sendUserText, isAiSpeaking]);
 
   const handleCompletion = async () => {
     setIsComplete(true);
@@ -475,10 +470,10 @@ export default function SpeakingPractice() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Silence Timer — 1s tiered behavior */}
+      {/* Silence Timer — only active when mic listening & AI silent */}
       {isConnected && !userMuted && !isAiSpeaking && !speechDetected && (
         <div className="flex justify-center pb-2">
-          <SilenceTimer active durationMs={1000} onTimeout={handleSilenceTimeout} />
+          <SilenceTimer active durationMs={3000} onTimeout={handleSilenceTimeout} />
         </div>
       )}
 

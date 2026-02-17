@@ -35,6 +35,7 @@ export function useRealtimeWebRTC() {
   const [error, setError] = useState<string | null>(null);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [speechDetected, setSpeechDetected] = useState(false);
+  const responseInFlightRef = useRef(false);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
@@ -93,6 +94,10 @@ export function useRealtimeWebRTC() {
   const sendUserText = useCallback((text: string) => {
     const dc = dcRef.current;
     if (!dc || dc.readyState !== "open") return;
+    if (responseInFlightRef.current) {
+      console.log("[guard] response already in flight, skipping sendUserText");
+      return;
+    }
     // Mute mic — AI will speak
     setMicEnabled(false);
     dc.send(JSON.stringify({
@@ -100,6 +105,7 @@ export function useRealtimeWebRTC() {
       item: { type: "message", role: "user", content: [{ type: "input_text", text }] },
     }));
     dc.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio", "text"] } }));
+    responseInFlightRef.current = true;
     setIsAiSpeaking(true);
     setSpeechDetected(false);
   }, [setMicEnabled]);
@@ -201,11 +207,11 @@ export function useRealtimeWebRTC() {
 
             // If AI is speaking, immediately stop playback
             if (audioRef.current?.srcObject) {
-              // Pause and reset the audio element to kill TTS output
               audioRef.current.pause();
               audioRef.current.srcObject = null;
             }
             setIsAiSpeaking(false);
+            responseInFlightRef.current = false;
 
             // Truncate the in-flight AI response via data channel
             const truncateDc = dcRef.current;
@@ -220,10 +226,13 @@ export function useRealtimeWebRTC() {
 
           if (type === "input_audio_buffer.speech_stopped") {
             perf("end_of_speech");
-            // Immediately request AI response so there's minimal silence
-            const respDc = dcRef.current;
-            if (respDc && respDc.readyState === "open") {
-              respDc.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio", "text"] } }));
+            // Only request AI response if none is already in flight
+            if (!responseInFlightRef.current) {
+              const respDc = dcRef.current;
+              if (respDc && respDc.readyState === "open") {
+                respDc.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio", "text"] } }));
+                responseInFlightRef.current = true;
+              }
             }
           }
 
@@ -251,6 +260,7 @@ export function useRealtimeWebRTC() {
           // AI response done → open mic
           if (type === "response.done") {
             setIsAiSpeaking(false);
+            responseInFlightRef.current = false;
             perf("tts_play_ended");
             firstChunkLogged = false;
             callbacksRef.current.onAiSpeakingEnd?.();
@@ -302,6 +312,7 @@ export function useRealtimeWebRTC() {
     pcRef.current = null;
     dcRef.current = null;
     audioRef.current = null;
+    responseInFlightRef.current = false;
     setStatus("idle");
     setIsAiSpeaking(false);
     setSpeechDetected(false);
