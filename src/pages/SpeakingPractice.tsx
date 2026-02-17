@@ -471,8 +471,8 @@ export default function SpeakingPractice() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Silence Timer — ONLY active in STUDENT_LISTENING state */}
-      {isConnected && !userMuted && conversationState === "STUDENT_LISTENING" && !speechDetected && (
+      {/* Silence Timer — ONLY active when truly in STUDENT_LISTENING and no AI audio */}
+      {isConnected && !userMuted && conversationState === "STUDENT_LISTENING" && !isAiSpeaking && !speechDetected && (
         <div className="flex justify-center pb-2">
           <SilenceTimer active durationMs={3000} onTimeout={handleSilenceTimeout} />
         </div>
