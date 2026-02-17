@@ -360,19 +360,25 @@ export function useRealtimeWebRTC() {
             callbacksRef.current.onAiTranscript?.(ev.transcript.trim());
           }
 
-          // ── response.done: do NOT switch state, start tail checker ──
+          // ── response.done: transition to STUDENT_LISTENING ──
+          // In WebRTC mode, audio plays via RTC track (not data channel deltas).
+          // response.audio.delta may or may not arrive. So we use response.done
+          // as the primary signal, with a short delay for audio buffer drain.
           if (type === "response.done") {
-            console.log(`[debug] GOT_RESPONSE_DONE t=${Date.now()}`);
+            console.log(`[debug] GOT_RESPONSE_DONE audioActive=${audioActiveRef.current} t=${Date.now()}`);
             responseDoneRef.current = true;
             deltaLogThrottle = 0;
 
-            if (!audioActiveRef.current) {
-              // No audio ever arrived — release immediately
-              console.warn(`[debug] FAILSAFE_RELEASE (response.done, no audio) t=${Date.now()}`);
-              finishAiTurn();
-            } else {
-              // Start tail checker: wait for 500ms gap in deltas
+            if (audioActiveRef.current) {
+              // Audio deltas were received — use tail checker for precise timing
               startTailChecker();
+            } else {
+              // No audio deltas (WebRTC mode) — wait 800ms for RTC audio buffer to drain
+              clearAllTimers();
+              tailUpperBoundRef.current = setTimeout(() => {
+                console.log(`[debug] AUDIO_TAIL_LISTENING (post-response.done drain) t=${Date.now()}`);
+                finishAiTurn();
+              }, 800);
             }
           }
 
