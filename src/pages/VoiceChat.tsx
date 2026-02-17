@@ -35,8 +35,8 @@ export default function VoiceChat() {
       onAiTranscript: (text) => setTranscripts((prev) => [...prev, { role: "assistant", text, timestamp: Date.now() }]),
       onUserTranscript: (text) => setTranscripts((prev) => [...prev, { role: "user", text, timestamp: Date.now() }]),
       onReady: (send) => send("Say hello and introduce yourself as an English conversation partner."),
-      onAiSpeakingEnd: () => {
-        if (!userMuted) setMicEnabled(true);
+      onStateChange: (state) => {
+        if (state === "STUDENT_LISTENING" && !userMuted) setMicEnabled(true);
       },
     });
   };

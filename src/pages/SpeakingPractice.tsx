@@ -171,6 +171,7 @@ export default function SpeakingPractice() {
   const {
     status: connectionState,
     error,
+    conversationState,
     isAiSpeaking,
     speechDetected,
     connect,
@@ -185,10 +186,10 @@ export default function SpeakingPractice() {
 
   // Reset silence counter when speech is detected or AI starts speaking
   useEffect(() => {
-    if (speechDetected || isAiSpeaking) {
+    if (speechDetected || conversationState === "AI_SPEAKING") {
       silenceCountRef.current = 0;
     }
-  }, [speechDetected, isAiSpeaking]);
+  }, [speechDetected, conversationState]);
 
   // ── Side effects ──
 
@@ -274,8 +275,8 @@ export default function SpeakingPractice() {
     // User transcripts: internal only, not displayed
   }, [sendUserText]);
 
-  const handleAiSpeakingEnd = useCallback(() => {
-    if (!userMutedRef.current) {
+  const handleStateChange = useCallback((state: string) => {
+    if (state === "STUDENT_LISTENING" && !userMutedRef.current) {
       setMicEnabled(true);
     }
   }, [setMicEnabled]);
@@ -303,14 +304,14 @@ export default function SpeakingPractice() {
       speed: profile?.speech_speed || "medium",
       onAiTranscript: handleAiTranscript,
       onUserTranscript: handleUserTranscript,
-      onAiSpeakingEnd: handleAiSpeakingEnd,
+      onStateChange: handleStateChange,
       onReady: (send) => {
         send("Start the lesson now. Introduce the verb and the first example sentence with a vivid situation context. Follow the lesson rules.");
       },
     });
 
     sessionStartRef.current = Date.now();
-  }, [verbData, profile, connect, handleAiTranscript, handleUserTranscript, handleAiSpeakingEnd]);
+  }, [verbData, profile, connect, handleAiTranscript, handleUserTranscript, handleStateChange]);
 
   const toggleMute = useCallback(() => {
     if (isAiSpeaking) return;
@@ -321,12 +322,12 @@ export default function SpeakingPractice() {
   }, [isAiSpeaking, userMuted, setMicEnabled]);
 
   const handleSilenceTimeout = useCallback(() => {
-    // Guard: never prompt while AI is speaking
-    if (isAiSpeaking) return;
+    // Guard: only prompt during STUDENT_LISTENING
+    if (conversationState !== "STUDENT_LISTENING") return;
     silenceCountRef.current += 1;
     console.log("[silence] 3s re-engagement #" + silenceCountRef.current);
     sendUserText("The student has been silent for 3+ seconds. Use one of the rotation strategies (A/B/C/D) from your silence-handling instructions. Do NOT repeat the same strategy you used last time. Keep it short and end with 'Repeat: <sentence>'. Do NOT use repeated motivational catchphrases.");
-  }, [sendUserText, isAiSpeaking]);
+  }, [sendUserText, conversationState]);
 
   const handleCompletion = async () => {
     setIsComplete(true);
@@ -470,8 +471,8 @@ export default function SpeakingPractice() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Silence Timer — only active when mic listening & AI silent */}
-      {isConnected && !userMuted && !isAiSpeaking && !speechDetected && (
+      {/* Silence Timer — ONLY active in STUDENT_LISTENING state */}
+      {isConnected && !userMuted && conversationState === "STUDENT_LISTENING" && !speechDetected && (
         <div className="flex justify-center pb-2">
           <SilenceTimer active durationMs={3000} onTimeout={handleSilenceTimeout} />
         </div>
