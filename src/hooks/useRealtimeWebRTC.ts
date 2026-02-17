@@ -125,14 +125,14 @@ export function useRealtimeWebRTC() {
     setConvState("AI_SPEAKING");
     setSpeechDetected(false);
 
-    // Fail-safe: if no audio.delta within 1500ms, reset to allow retry
+    // Fail-safe: if no audio.delta within 5000ms, reset to allow retry
     const failSafeId = setTimeout(() => {
       if (responseInFlightRef.current && !firstAudioDeltaReceivedRef.current) {
-        console.warn("[fail-safe] No audio.delta in 1500ms — forcing STUDENT_LISTENING");
+        console.warn("[fail-safe] No audio.delta in 5000ms — forcing STUDENT_LISTENING");
         responseInFlightRef.current = false;
         setConvState("STUDENT_LISTENING");
       }
-    }, 1500);
+    }, 5000);
     failSafeTimerRef.current = failSafeId;
     firstAudioDeltaReceivedRef.current = false;
   }, [setMicEnabled, setConvState]);
@@ -288,7 +288,18 @@ export function useRealtimeWebRTC() {
             // Re-attach audio if cleared by barge-in
             if (audioRef.current && !audioRef.current.srcObject && remoteStreamRef.current) {
               audioRef.current.srcObject = remoteStreamRef.current;
-              audioRef.current.play().catch(() => {});
+              audioRef.current.play().then(() => {
+                console.log(`[debug] AUDIO_REATTACH_PLAY_OK t=${Date.now()}`);
+              }).catch((err) => {
+                console.error(`[debug] AUDIO_REATTACH_PLAY_FAILED t=${Date.now()}`, err);
+                // Retry after short delay
+                setTimeout(() => {
+                  if (audioRef.current && remoteStreamRef.current) {
+                    audioRef.current.srcObject = remoteStreamRef.current;
+                    audioRef.current.play().catch(() => {});
+                  }
+                }, 100);
+              });
             }
             // Ensure we're in AI_SPEAKING
             if (convStateRef.current !== "AI_SPEAKING") {
@@ -300,11 +311,10 @@ export function useRealtimeWebRTC() {
             if (trk) trk.enabled = false;
           }
 
-          // AI transcript done — only add subtitle if still in AI_SPEAKING
+          // AI transcript done — always show subtitle (don't gate on state)
           if (type === "response.audio_transcript.done" && event.transcript) {
-            if (convStateRef.current === "AI_SPEAKING") {
-              callbacksRef.current.onAiTranscript?.(event.transcript.trim());
-            }
+            console.log(`[debug] GOT_AI_TRANSCRIPT t=${Date.now()} state=${convStateRef.current}`);
+            callbacksRef.current.onAiTranscript?.(event.transcript.trim());
           }
 
           // AI response done → transition to STUDENT_LISTENING
