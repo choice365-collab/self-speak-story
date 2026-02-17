@@ -16,29 +16,37 @@ type ConnectOptions = {
   turnDetection?: Record<string, unknown>;
   inputAudioTranscription?: Record<string, unknown>;
   speed?: string;
-  /** Called when AI transcript is finalized */
   onAiTranscript?: (text: string) => void;
-  /** Called when user transcript is finalized */
   onUserTranscript?: (text: string) => void;
-  /** Called right after data channel opens — send initial prompt here */
   onReady?: (sendText: (text: string) => void) => void;
-  /** Called when conversation state changes */
   onStateChange?: (state: ConversationState) => void;
 };
 
 /**
  * Single source of truth for OpenAI Realtime WebRTC.
- * Manages: mic stream, RTCPeerConnection, data channel, audio output.
- * Uses a strict conversation state machine: IDLE → AI_SPEAKING ↔ STUDENT_LISTENING
+ * State machine: IDLE → AI_SPEAKING ↔ STUDENT_LISTENING
+ *
+ * Key design:
+ *  - response.done does NOT switch to STUDENT_LISTENING.
+ *  - Instead an "audio tail checker" waits for audio deltas to stop (500ms gap)
+ *    before transitioning, preventing premature state changes.
+ *  - A 5s fail-safe ensures no deadlock if deltas never arrive.
+ *  - An upper-bound (2s after response.done) ensures the tail checker can't block forever.
  */
 export function useRealtimeWebRTC() {
   const [status, setStatus] = useState<RealtimeStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [conversationState, setConversationState] = useState<ConversationState>("IDLE");
   const [speechDetected, setSpeechDetected] = useState(false);
+
+  // ── Refs for state machine ──
   const responseInFlightRef = useRef(false);
-  const firstAudioDeltaReceivedRef = useRef(false);
+  const audioActiveRef = useRef(false);
+  const responseDoneRef = useRef(false);
+  const lastAudioDeltaAtRef = useRef(0);
   const failSafeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tailCheckerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tailUpperBoundRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
@@ -46,25 +54,63 @@ export function useRealtimeWebRTC() {
   const streamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const callbacksRef = useRef<ConnectOptions>({});
-  const perfRef = useRef<Record<string, number>>({});
-  // Ref mirror of conversationState for use in closures
   const convStateRef = useRef<ConversationState>("IDLE");
+
+  // ── Helpers ──
 
   const setConvState = useCallback((state: ConversationState) => {
     convStateRef.current = state;
     setConversationState(state);
     callbacksRef.current.onStateChange?.(state);
-    console.log(`[state] conversationState → ${state}`);
+    console.log(`[state] → ${state} t=${Date.now()}`);
   }, []);
 
-  // Perf logging
-  const perf = useCallback((label: string) => {
-    const now = performance.now();
-    perfRef.current[label] = now;
-    console.log(`[perf] ${label}: ${now.toFixed(1)}ms`);
+  const clearAllTimers = useCallback(() => {
+    if (failSafeTimerRef.current) { clearTimeout(failSafeTimerRef.current); failSafeTimerRef.current = null; }
+    if (tailCheckerRef.current) { clearInterval(tailCheckerRef.current); tailCheckerRef.current = null; }
+    if (tailUpperBoundRef.current) { clearTimeout(tailUpperBoundRef.current); tailUpperBoundRef.current = null; }
   }, []);
 
-  // ── Mic management (single getUserMedia) ──
+  /** Transition from AI_SPEAKING → STUDENT_LISTENING. Single exit point. */
+  const finishAiTurn = useCallback(() => {
+    clearAllTimers();
+    responseInFlightRef.current = false;
+    audioActiveRef.current = false;
+    responseDoneRef.current = false;
+    lastAudioDeltaAtRef.current = 0;
+    setConvState("STUDENT_LISTENING");
+    // Open mic
+    const trk = streamRef.current?.getAudioTracks()[0];
+    if (trk) trk.enabled = true;
+    setSpeechDetected(false);
+    console.log(`[debug] AUDIO_TAIL_LISTENING t=${Date.now()}`);
+  }, [clearAllTimers, setConvState]);
+
+  /** Start the tail checker interval — runs every 100ms */
+  const startTailChecker = useCallback(() => {
+    // Clear any existing
+    if (tailCheckerRef.current) clearInterval(tailCheckerRef.current);
+    tailCheckerRef.current = setInterval(() => {
+      if (
+        responseDoneRef.current &&
+        audioActiveRef.current &&
+        performance.now() - lastAudioDeltaAtRef.current >= 500
+      ) {
+        finishAiTurn();
+      }
+    }, 100);
+
+    // Upper bound: 2s after response.done, force release
+    if (tailUpperBoundRef.current) clearTimeout(tailUpperBoundRef.current);
+    tailUpperBoundRef.current = setTimeout(() => {
+      if (convStateRef.current === "AI_SPEAKING") {
+        console.warn(`[debug] FAILSAFE_RELEASE (tail upper bound 2s) t=${Date.now()}`);
+        finishAiTurn();
+      }
+    }, 2000);
+  }, [finishAiTurn]);
+
+  // ── Mic management ──
 
   const ensureMic = useCallback(async (): Promise<MediaStream> => {
     const existing = streamRef.current;
@@ -73,12 +119,8 @@ export function useRealtimeWebRTC() {
     }
     try {
       const perm = await navigator.permissions.query({ name: "microphone" as PermissionName });
-      if (perm.state === "denied") {
-        throw new Error("Microphone permission denied. Please enable it in browser settings.");
-      }
-    } catch (e: any) {
-      if (e.message?.includes("denied")) throw e;
-    }
+      if (perm.state === "denied") throw new Error("Microphone permission denied.");
+    } catch (e: any) { if (e.message?.includes("denied")) throw e; }
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     localStorage.setItem("micPermissionGranted", "true");
     streamRef.current = stream;
@@ -90,17 +132,14 @@ export function useRealtimeWebRTC() {
     if (track) {
       track.enabled = enabled;
       if (enabled) setSpeechDetected(false);
-      perf(enabled ? "mic_opened" : "mic_muted");
-    }
-  }, [perf]);
-
-  const setSpeakerMuted = useCallback((muted: boolean) => {
-    if (audioRef.current) {
-      audioRef.current.muted = muted;
     }
   }, []);
 
-  // ── Send text via data channel (guarded by state machine) ──
+  const setSpeakerMuted = useCallback((muted: boolean) => {
+    if (audioRef.current) audioRef.current.muted = muted;
+  }, []);
+
+  // ── Send text (guarded) ──
 
   const sendUserText = useCallback((text: string, force = false) => {
     const dc = dcRef.current;
@@ -108,34 +147,39 @@ export function useRealtimeWebRTC() {
       console.log("[sendUserText] BLOCKED — dc not open");
       return;
     }
-    // Guard: never send while AI is speaking or response already in flight (unless forced for initial prompt)
-    if (!force && (convStateRef.current === "AI_SPEAKING" || responseInFlightRef.current)) {
-      console.log("[guard] blocked sendUserText — state:", convStateRef.current, "inFlight:", responseInFlightRef.current);
-      return;
+    if (!force) {
+      if (responseInFlightRef.current) { console.log("[guard] blocked — responseInFlight"); return; }
+      if (convStateRef.current === "AI_SPEAKING") { console.log("[guard] blocked — AI_SPEAKING"); return; }
     }
-    // Mute mic — AI will speak
-    setMicEnabled(false);
+
+    // Mute mic
+    const trk = streamRef.current?.getAudioTracks()[0];
+    if (trk) trk.enabled = false;
+
     dc.send(JSON.stringify({
       type: "conversation.item.create",
       item: { type: "message", role: "user", content: [{ type: "input_text", text }] },
     }));
+
     console.log(`[debug] SENT_RESPONSE_CREATE t=${Date.now()}`);
     dc.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio", "text"] } }));
+
     responseInFlightRef.current = true;
+    audioActiveRef.current = false;
+    responseDoneRef.current = false;
+    lastAudioDeltaAtRef.current = 0;
     setConvState("AI_SPEAKING");
     setSpeechDetected(false);
 
-    // Fail-safe: if no audio.delta within 5000ms, reset to allow retry
-    const failSafeId = setTimeout(() => {
-      if (responseInFlightRef.current && !firstAudioDeltaReceivedRef.current) {
-        console.warn("[fail-safe] No audio.delta in 5000ms — forcing STUDENT_LISTENING");
-        responseInFlightRef.current = false;
-        setConvState("STUDENT_LISTENING");
+    // Fail-safe: if no audio.delta within 5s, release
+    clearAllTimers();
+    failSafeTimerRef.current = setTimeout(() => {
+      if (responseInFlightRef.current && !audioActiveRef.current) {
+        console.warn(`[debug] FAILSAFE_RELEASE (no delta 5s) t=${Date.now()}`);
+        finishAiTurn();
       }
     }, 5000);
-    failSafeTimerRef.current = failSafeId;
-    firstAudioDeltaReceivedRef.current = false;
-  }, [setMicEnabled, setConvState]);
+  }, [setConvState, clearAllTimers, finishAiTurn]);
 
   // ── Connect ──
 
@@ -143,15 +187,14 @@ export function useRealtimeWebRTC() {
     callbacksRef.current = options;
     setStatus("connecting");
     setError(null);
-    perf("start_click");
+    console.log(`[debug] START_CLICK t=${Date.now()}`);
 
     try {
-      // 1. Chrome audio unlock (must be in user gesture)
+      // 1. Chrome audio unlock
       if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
       if (audioCtxRef.current.state === "suspended") await audioCtxRef.current.resume();
-      perf("audio_ctx_resumed");
 
-      // Create audio element & warm up in user gesture
+      // Warm up audio element in user gesture
       const audio = document.createElement("audio");
       audio.autoplay = true;
       (audio as any).playsInline = true;
@@ -161,9 +204,8 @@ export function useRealtimeWebRTC() {
       audio.src = "";
       audioRef.current = audio;
 
-      // 2. Mic — reuse or acquire
+      // 2. Mic
       const stream = await ensureMic();
-      // Mic OFF initially — AI speaks first
       stream.getAudioTracks().forEach((t) => { t.enabled = false; });
 
       // 3. Ephemeral token
@@ -177,7 +219,7 @@ export function useRealtimeWebRTC() {
           },
           body: JSON.stringify({
             voice: options.voice || "alloy",
-            instructions: options.instructions || "You are an energetic English teacher. You must speak only in English. Never use Korean. Never translate into Korean.",
+            instructions: options.instructions || "You are an energetic English teacher.",
             turn_detection: options.turnDetection || { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 3000 },
             input_audio_transcription: options.inputAudioTranscription || { model: "gpt-4o-mini-transcribe" },
             speed: options.speed || "medium",
@@ -197,8 +239,6 @@ export function useRealtimeWebRTC() {
       // 4. RTCPeerConnection
       const pc = new RTCPeerConnection();
       pcRef.current = pc;
-
-      // Store remote stream for re-attachment after barge-in
       const remoteStreamRef = { current: null as MediaStream | null };
 
       pc.ontrack = (e) => {
@@ -209,7 +249,6 @@ export function useRealtimeWebRTC() {
         }).catch((err) => {
           console.error(`[debug] AUDIO_PLAY_FAILED t=${Date.now()}`, err);
         });
-        perf("tts_play_started");
       };
 
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
@@ -217,82 +256,88 @@ export function useRealtimeWebRTC() {
       // 5. Data channel
       const dc = pc.createDataChannel("oai-events");
       dcRef.current = dc;
-      let firstChunkLogged = false;
+      let deltaLogThrottle = 0;
 
       dc.onopen = () => {
         console.log(`[debug] DC_OPEN t=${Date.now()}`);
-        perf("dc_open");
-        // Send initial prompt with force=true to bypass state guard
         callbacksRef.current.onReady?.((text: string) => sendUserText(text, true));
-        perf("first_ai_request_sent");
       };
 
       dc.onmessage = (e) => {
         try {
-          const event = JSON.parse(e.data);
-          const type = event.type as string;
+          const ev = JSON.parse(e.data);
+          const type = ev.type as string;
 
-          // ── Barge-in: student speech interrupts AI ──
+          // ── Barge-in ──
           if (type === "input_audio_buffer.speech_started") {
             setSpeechDetected(true);
-            perf("speech_detected");
-
-            // If AI is speaking, immediately stop playback and cancel
             if (convStateRef.current === "AI_SPEAKING") {
+              // Stop audio playback
               if (audioRef.current?.srcObject) {
                 audioRef.current.pause();
                 audioRef.current.srcObject = null;
               }
-              // Cancel in-flight response server-side
-              const truncateDc = dcRef.current;
-              if (truncateDc && truncateDc.readyState === "open") {
-                truncateDc.send(JSON.stringify({ type: "response.cancel" }));
+              // Cancel server-side
+              const d = dcRef.current;
+              if (d && d.readyState === "open") {
+                d.send(JSON.stringify({ type: "response.cancel" }));
               }
+              clearAllTimers();
               responseInFlightRef.current = false;
+              audioActiveRef.current = false;
+              responseDoneRef.current = false;
             }
-
-            // Transition to STUDENT_LISTENING
             setConvState("STUDENT_LISTENING");
-
-            // Ensure mic is fully open for student
-            const micTrack = streamRef.current?.getAudioTracks()[0];
-            if (micTrack) micTrack.enabled = true;
+            const mic = streamRef.current?.getAudioTracks()[0];
+            if (mic) mic.enabled = true;
           }
 
+          // ── Student speech ended → trigger AI response ──
           if (type === "input_audio_buffer.speech_stopped") {
-            perf("end_of_speech");
-            // Only request AI response if state allows and nothing in flight
             if (convStateRef.current !== "AI_SPEAKING" && !responseInFlightRef.current) {
-              const respDc = dcRef.current;
-              if (respDc && respDc.readyState === "open") {
-                respDc.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio", "text"] } }));
+              const d = dcRef.current;
+              if (d && d.readyState === "open") {
+                console.log(`[debug] SENT_RESPONSE_CREATE (speech_stopped) t=${Date.now()}`);
+                d.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio", "text"] } }));
                 responseInFlightRef.current = true;
+                audioActiveRef.current = false;
+                responseDoneRef.current = false;
                 setConvState("AI_SPEAKING");
+                // Mute mic
+                const mic = streamRef.current?.getAudioTracks()[0];
+                if (mic) mic.enabled = false;
+                // Fail-safe
+                clearAllTimers();
+                failSafeTimerRef.current = setTimeout(() => {
+                  if (responseInFlightRef.current && !audioActiveRef.current) {
+                    console.warn(`[debug] FAILSAFE_RELEASE (speech_stopped no delta) t=${Date.now()}`);
+                    finishAiTurn();
+                  }
+                }, 5000);
               }
             }
           }
 
-          // AI audio chunk — confirms AI_SPEAKING
+          // ── AI audio chunk ──
           if (type === "response.audio.delta") {
-            if (!firstChunkLogged) {
-              console.log(`[debug] GOT_RESPONSE_AUDIO_DELTA t=${Date.now()}`);
-              perf("first_tts_chunk_received");
-              firstChunkLogged = true;
+            const now = performance.now();
+            lastAudioDeltaAtRef.current = now;
+            if (!audioActiveRef.current) {
+              audioActiveRef.current = true;
+              console.log(`[debug] GOT_AUDIO_DELTA (first) t=${Date.now()}`);
+              // Cancel the "no delta" fail-safe since we got audio
+              if (failSafeTimerRef.current) { clearTimeout(failSafeTimerRef.current); failSafeTimerRef.current = null; }
+            } else {
+              deltaLogThrottle++;
+              if (deltaLogThrottle % 50 === 0) {
+                console.log(`[debug] GOT_AUDIO_DELTA #${deltaLogThrottle} t=${Date.now()}`);
+              }
             }
-            // Mark that we received audio — cancel fail-safe
-            firstAudioDeltaReceivedRef.current = true;
-            if (failSafeTimerRef.current) {
-              clearTimeout(failSafeTimerRef.current);
-              failSafeTimerRef.current = null;
-            }
+
             // Re-attach audio if cleared by barge-in
             if (audioRef.current && !audioRef.current.srcObject && remoteStreamRef.current) {
               audioRef.current.srcObject = remoteStreamRef.current;
-              audioRef.current.play().then(() => {
-                console.log(`[debug] AUDIO_REATTACH_PLAY_OK t=${Date.now()}`);
-              }).catch((err) => {
-                console.error(`[debug] AUDIO_REATTACH_PLAY_FAILED t=${Date.now()}`, err);
-                // Retry after short delay
+              audioRef.current.play().catch(() => {
                 setTimeout(() => {
                   if (audioRef.current && remoteStreamRef.current) {
                     audioRef.current.srcObject = remoteStreamRef.current;
@@ -301,38 +346,39 @@ export function useRealtimeWebRTC() {
                 }, 100);
               });
             }
-            // Ensure we're in AI_SPEAKING
-            if (convStateRef.current !== "AI_SPEAKING") {
-              setConvState("AI_SPEAKING");
-            }
+
+            // Ensure state
+            if (convStateRef.current !== "AI_SPEAKING") setConvState("AI_SPEAKING");
             setSpeechDetected(false);
-            // Ensure mic off while AI speaks
-            const trk = streamRef.current?.getAudioTracks()[0];
-            if (trk) trk.enabled = false;
+            const mic = streamRef.current?.getAudioTracks()[0];
+            if (mic) mic.enabled = false;
           }
 
-          // AI transcript done — always show subtitle (don't gate on state)
-          if (type === "response.audio_transcript.done" && event.transcript) {
-            console.log(`[debug] GOT_AI_TRANSCRIPT t=${Date.now()} state=${convStateRef.current}`);
-            callbacksRef.current.onAiTranscript?.(event.transcript.trim());
+          // ── AI transcript ──
+          if (type === "response.audio_transcript.done" && ev.transcript) {
+            console.log(`[debug] GOT_AI_TRANSCRIPT t=${Date.now()}`);
+            callbacksRef.current.onAiTranscript?.(ev.transcript.trim());
           }
 
-          // AI response done → transition to STUDENT_LISTENING
+          // ── response.done: do NOT switch state, start tail checker ──
           if (type === "response.done") {
             console.log(`[debug] GOT_RESPONSE_DONE t=${Date.now()}`);
-            responseInFlightRef.current = false;
-            if (failSafeTimerRef.current) {
-              clearTimeout(failSafeTimerRef.current);
-              failSafeTimerRef.current = null;
+            responseDoneRef.current = true;
+            deltaLogThrottle = 0;
+
+            if (!audioActiveRef.current) {
+              // No audio ever arrived — release immediately
+              console.warn(`[debug] FAILSAFE_RELEASE (response.done, no audio) t=${Date.now()}`);
+              finishAiTurn();
+            } else {
+              // Start tail checker: wait for 500ms gap in deltas
+              startTailChecker();
             }
-            perf("tts_play_ended");
-            firstChunkLogged = false;
-            setConvState("STUDENT_LISTENING");
           }
 
-          // User transcript
-          if (type === "conversation.item.input_audio_transcription.completed" && event.transcript) {
-            callbacksRef.current.onUserTranscript?.(event.transcript.trim());
+          // ── User transcript ──
+          if (type === "conversation.item.input_audio_transcription.completed" && ev.transcript) {
+            callbacksRef.current.onUserTranscript?.(ev.transcript.trim());
           }
         } catch {}
       };
@@ -340,7 +386,6 @@ export function useRealtimeWebRTC() {
       // 6. SDP exchange
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-
       const model = session.model || "gpt-4o-mini-realtime-preview";
       const sdpRes = await fetch(
         `https://api.openai.com/v1/realtime?model=${model}`,
@@ -350,8 +395,7 @@ export function useRealtimeWebRTC() {
 
       await pc.setRemoteDescription({ type: "answer", sdp: await sdpRes.text() });
       setStatus("connected");
-      setConvState("AI_SPEAKING"); // AI speaks first
-      perf("session_connected");
+      setConvState("AI_SPEAKING");
 
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
@@ -364,15 +408,12 @@ export function useRealtimeWebRTC() {
       setStatus("error");
       setError(e.message || "Failed to connect");
     }
-  }, [ensureMic, perf, sendUserText, setConvState]);
+  }, [ensureMic, sendUserText, setConvState, clearAllTimers, finishAiTurn, startTailChecker]);
 
   // ── Disconnect ──
 
   const disconnect = useCallback(() => {
-    if (failSafeTimerRef.current) {
-      clearTimeout(failSafeTimerRef.current);
-      failSafeTimerRef.current = null;
-    }
+    clearAllTimers();
     dcRef.current?.close();
     pcRef.current?.close();
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -382,14 +423,15 @@ export function useRealtimeWebRTC() {
     dcRef.current = null;
     audioRef.current = null;
     responseInFlightRef.current = false;
-    firstAudioDeltaReceivedRef.current = false;
+    audioActiveRef.current = false;
+    responseDoneRef.current = false;
+    lastAudioDeltaAtRef.current = 0;
     convStateRef.current = "IDLE";
     setStatus("idle");
     setConversationState("IDLE");
     setSpeechDetected(false);
-  }, []);
+  }, [clearAllTimers]);
 
-  // Cleanup on unmount
   useEffect(() => () => { disconnect(); }, [disconnect]);
 
   return {
@@ -397,6 +439,7 @@ export function useRealtimeWebRTC() {
     error,
     conversationState,
     isAiSpeaking: conversationState === "AI_SPEAKING",
+    audioActive: audioActiveRef.current,
     speechDetected,
     connect,
     disconnect,
