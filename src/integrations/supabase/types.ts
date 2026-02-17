@@ -158,6 +158,36 @@ export type Database = {
         }
         Relationships: []
       }
+      learning_history: {
+        Row: {
+          ai_explanation: string | null
+          example_sentences: string[] | null
+          expression: string
+          id: string
+          learned_at: string
+          session_date: string
+          student_id: string
+        }
+        Insert: {
+          ai_explanation?: string | null
+          example_sentences?: string[] | null
+          expression: string
+          id?: string
+          learned_at?: string
+          session_date?: string
+          student_id: string
+        }
+        Update: {
+          ai_explanation?: string | null
+          example_sentences?: string[] | null
+          expression?: string
+          id?: string
+          learned_at?: string
+          session_date?: string
+          student_id?: string
+        }
+        Relationships: []
+      }
       practice_logs: {
         Row: {
           ai_feedback: string | null
