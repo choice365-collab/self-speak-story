@@ -3,14 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowLeft, Mic, MicOff, PhoneOff, Bug } from "lucide-react";
+import { ArrowLeft, Mic, MicOff, PhoneOff } from "lucide-react";
 import { useRealtimeWebRTC, TranscriptEntry } from "@/hooks/useRealtimeWebRTC";
 
 export default function VoiceChat() {
   const navigate = useNavigate();
-  const [showDebug, setShowDebug] = useState(false);
   const [userMuted, setUserMuted] = useState(false);
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
+  const streamingTextRef = useRef("");
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -20,7 +20,6 @@ export default function VoiceChat() {
     connect,
     disconnect,
     setMicEnabled,
-    sendUserText,
   } = useRealtimeWebRTC();
 
   const isConnected = status === "connected";
@@ -31,12 +30,34 @@ export default function VoiceChat() {
   }, [transcripts]);
 
   const handleStart = () => {
+    streamingTextRef.current = "";
     connect({
-      onAiTranscript: (text) => setTranscripts((prev) => [...prev, { role: "assistant", text, timestamp: Date.now() }]),
+      onAiTextDelta: (delta) => {
+        streamingTextRef.current += delta;
+        const currentText = streamingTextRef.current;
+        setTranscripts((prev) => {
+          const last = prev[prev.length - 1];
+          if (last && last.role === "assistant" && last.streaming) {
+            return [...prev.slice(0, -1), { ...last, text: currentText }];
+          }
+          return [...prev, { role: "assistant", text: currentText, timestamp: Date.now(), streaming: true }];
+        });
+      },
+      onAiTranscriptDone: () => {
+        // Finalize streaming entry
+        setTranscripts((prev) => {
+          const last = prev[prev.length - 1];
+          if (last && last.streaming) {
+            return [...prev.slice(0, -1), { ...last, streaming: false }];
+          }
+          return prev;
+        });
+        streamingTextRef.current = "";
+      },
       onUserTranscript: (text) => setTranscripts((prev) => [...prev, { role: "user", text, timestamp: Date.now() }]),
       onReady: (send) => send("Say hello and introduce yourself as an English conversation partner."),
       onStateChange: (state) => {
-        if (state === "STUDENT_LISTENING" && !userMuted) setMicEnabled(true);
+        if (state === "IDLE" && !userMuted) setMicEnabled(true);
       },
     });
   };
@@ -122,7 +143,7 @@ export default function VoiceChat() {
   );
 }
 
-function TranscriptBubble({ entry }: { entry: TranscriptEntry }) {
+function TranscriptBubble({ entry }: { entry: TranscriptEntry & { streaming?: boolean } }) {
   const isUser = entry.role === "user";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
