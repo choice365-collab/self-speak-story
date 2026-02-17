@@ -10,6 +10,7 @@ export default function VoiceChat() {
   const navigate = useNavigate();
   const [userMuted, setUserMuted] = useState(false);
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
+  const [streamingText, setStreamingText] = useState("");
   const streamingTextRef = useRef("");
   const transcriptEndRef = useRef<HTMLDivElement>(null);
 
@@ -27,36 +28,29 @@ export default function VoiceChat() {
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [transcripts]);
+  }, [transcripts, streamingText]);
 
   const handleStart = () => {
     streamingTextRef.current = "";
+    setStreamingText("");
     connect({
       onAiTextDelta: (delta) => {
         streamingTextRef.current += delta;
-        const currentText = streamingTextRef.current;
-        setTranscripts((prev) => {
-          const last = prev[prev.length - 1];
-          if (last && last.role === "assistant" && last.streaming) {
-            return [...prev.slice(0, -1), { ...last, text: currentText }];
-          }
-          return [...prev, { role: "assistant", text: currentText, timestamp: Date.now(), streaming: true }];
-        });
+        setStreamingText(streamingTextRef.current);
       },
-      onAiTranscriptDone: () => {
-        // Finalize streaming entry
-        setTranscripts((prev) => {
-          const last = prev[prev.length - 1];
-          if (last && last.streaming) {
-            return [...prev.slice(0, -1), { ...last, streaming: false }];
-          }
-          return prev;
-        });
+      onAiTranscriptDone: (text) => {
+        setTranscripts((prev) => [...prev, { role: "assistant", text, timestamp: Date.now() }]);
         streamingTextRef.current = "";
+        setStreamingText("");
       },
       onUserTranscript: (text) => setTranscripts((prev) => [...prev, { role: "user", text, timestamp: Date.now() }]),
       onReady: (send) => send("Say hello and introduce yourself as an English conversation partner."),
       onStateChange: (state) => {
+        // Clear streaming buffer on barge-in
+        if (state === "STUDENT_SPEAKING") {
+          streamingTextRef.current = "";
+          setStreamingText("");
+        }
         if (state === "IDLE" && !userMuted) setMicEnabled(true);
       },
     });
@@ -91,7 +85,7 @@ export default function VoiceChat() {
 
       <ScrollArea className="flex-1 px-4 py-4">
         <div className="space-y-3 min-h-[200px]">
-          {transcripts.length === 0 && (
+          {transcripts.length === 0 && !streamingText && (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <span className="text-6xl mb-4">{isConnected ? "🗣️" : "🎙️"}</span>
               <p className="text-lg font-bold text-foreground">
@@ -102,6 +96,14 @@ export default function VoiceChat() {
           {transcripts.map((entry, i) => (
             <TranscriptBubble key={i} entry={entry} />
           ))}
+          {streamingText && (
+            <div className="flex justify-start">
+              <div className="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm font-semibold bg-muted text-foreground rounded-bl-md">
+                <span className="text-[10px] opacity-60 block mb-0.5">AI · streaming…</span>
+                {streamingText}<span className="animate-pulse">▌</span>
+              </div>
+            </div>
+          )}
           <div ref={transcriptEndRef} />
         </div>
       </ScrollArea>
@@ -143,7 +145,7 @@ export default function VoiceChat() {
   );
 }
 
-function TranscriptBubble({ entry }: { entry: TranscriptEntry & { streaming?: boolean } }) {
+function TranscriptBubble({ entry }: { entry: TranscriptEntry }) {
   const isUser = entry.role === "user";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>

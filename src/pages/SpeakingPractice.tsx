@@ -275,6 +275,11 @@ export default function SpeakingPractice() {
       onAiTranscriptDone: handleAiTranscriptDone,
       onUserTranscript: handleUserTranscript,
       onStateChange: (state) => {
+        // Clear streaming buffer on barge-in
+        if (state === "STUDENT_SPEAKING") {
+          streamingTextRef.current = "";
+          setStreamingText("");
+        }
         if (state === "IDLE" && !userMutedRef.current) {
           setMicEnabled(true);
         }
