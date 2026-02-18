@@ -50,7 +50,8 @@ serve(async (req) => {
 
       // Sign in using the email and a generated password
       const email = authUser.user.email!;
-      const genPassword = `student_${login_id}_${storedPin}`;
+      const originalStudentId = profile.student_id || login_id;
+      const genPassword = `student_${originalStudentId}_${storedPin}`;
 
       // Try to sign in
       const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
