@@ -124,7 +124,7 @@ serve(async (req) => {
 
       const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
         email,
-        password,
+        password: password.toLowerCase(),
         email_confirm: true,
         user_metadata: { role: "admin", admin_id: login_id },
       });
