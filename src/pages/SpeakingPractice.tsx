@@ -69,14 +69,14 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
   const sitList = situations.map((s, i) => "  " + (i + 1) + ". " + s).join("\n");
 
   const difficultyGuides: Record<string, string> = {
-    low: "Use only simple sentences. Basic vocabulary only.",
-    medium: "Use moderate grammar with common expressions.",
-    high: "Use natural, varied grammar including idioms.",
+    low: "CRITICAL: Use ONLY simple present/past tense. Maximum 5-6 words per sentence. Use ONLY basic words a 6-year-old would know (go, eat, play, like, want, have). NO idioms. NO complex grammar. Repeat words often.",
+    medium: "Use common grammar (present, past, future, can/will). Sentences of 5-8 words. Use everyday vocabulary. Occasionally introduce one new word with context.",
+    high: "Use natural varied grammar including present perfect, conditionals, and phrasal verbs. Include occasional idioms with explanation. Sentences can be 8-12 words.",
   };
   const speedGuides: Record<string, string> = {
-    slow: "Speak VERY slowly. SHORT sentences (3-6 words). Repeat key phrases.",
-    medium: "Speak slowly and clearly. Short sentences (5-8 words).",
-    fast: "Speak at a moderate pace. Normal length sentences.",
+    slow: "CRITICAL RULE — You MUST speak EXTREMELY slowly. Leave a 1-second pause between EVERY sentence. Use MAXIMUM 4-5 words per sentence. Repeat each key phrase TWICE. This is the MOST IMPORTANT rule.",
+    medium: "Speak clearly and at a deliberately slow pace — about 60% of normal adult speed. Keep sentences to 5-8 words. Pause briefly between sentences.",
+    fast: "Speak at about 80% of normal adult speed. Use natural-length sentences up to 10 words. Still pause between thoughts.",
   };
 
   return [
@@ -127,6 +127,8 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     koreanHintMode
       ? 'KOREAN HINTS: After every quoted target sentence, add a Korean translation in parentheses. Example: "I got back home" (집에 돌아왔어). Always include this hint for every target sentence you present.'
       : "",
+    "",
+    "⚠️ REMINDER — DIFFICULTY=" + difficultyLevel.toUpperCase() + ", PACE=" + speechSpeed.toUpperCase() + ". These settings are NON-NEGOTIABLE. Every single sentence you speak must strictly follow the DIFFICULTY and PACE rules above. If PACE is SLOW, you must use very short sentences and pause between them.",
   ].filter(Boolean).join("\n");
 }
 
