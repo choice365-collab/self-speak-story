@@ -112,67 +112,6 @@ export default function AdminDashboard() {
   const [deleteStudentId, setDeleteStudentId] = useState<string | null>(null);
   const [deletingStudent, setDeletingStudent] = useState(false);
 
-  // Bulk student delete
-  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
-  const [bulkDeleteStudentsOpen, setBulkDeleteStudentsOpen] = useState(false);
-  const [bulkDeletingStudents, setBulkDeletingStudents] = useState(false);
-  const [bulkDeleteProgress, setBulkDeleteProgress] = useState("");
-
-  const toggleStudentSelection = (id: string) => {
-    setSelectedStudentIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleAllStudents = () => {
-    if (selectedStudentIds.size === students.length) {
-      setSelectedStudentIds(new Set());
-    } else {
-      setSelectedStudentIds(new Set(students.map(s => s.id)));
-    }
-  };
-
-  const bulkDeleteStudents = async () => {
-    setBulkDeletingStudents(true);
-    const ids = Array.from(selectedStudentIds);
-    let deleted = 0;
-    try {
-      const session = (await supabase.auth.getSession()).data.session;
-      if (!session) throw new Error("Not authenticated");
-      for (const id of ids) {
-        setBulkDeleteProgress(`Deleting ${deleted + 1}/${ids.length}...`);
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          },
-          body: JSON.stringify({ user_id: id }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          console.error(`Failed to delete ${id}:`, data.error);
-          continue;
-        }
-        deleted++;
-      }
-      setStudents(prev => prev.filter(s => !selectedStudentIds.has(s.id)));
-      setAssignments(prev => prev.filter(a => !selectedStudentIds.has(a.student_id)));
-      setSelectedStudentIds(new Set());
-      setBulkDeleteStudentsOpen(false);
-      toast.success(`${deleted} student(s) deleted 🗑️`);
-    } catch (e: any) {
-      toast.error(e.message || "Bulk delete failed");
-    } finally {
-      setBulkDeletingStudents(false);
-      setBulkDeleteProgress("");
-    }
-  };
-
   const deleteStudent = async (studentId: string) => {
     setDeletingStudent(true);
     try {
@@ -183,7 +122,6 @@ export default function AdminDashboard() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         },
         body: JSON.stringify({ user_id: studentId }),
       });
@@ -788,28 +726,15 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold">📋 Student List</h3>
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="ghost" onClick={toggleAllStudents} className="rounded-xl text-xs font-bold">
-                {selectedStudentIds.size === students.length && students.length > 0 ? "Deselect All" : "Select All"}
-              </Button>
-              {selectedStudentIds.size > 0 && (
-                <Button size="sm" variant="destructive" onClick={() => setBulkDeleteStudentsOpen(true)} className="rounded-xl text-xs font-bold gap-1">
-                  <Trash2 className="h-3.5 w-3.5" /> Delete {selectedStudentIds.size}
-                </Button>
-              )}
-            </div>
-          </div>
+          <h3 className="text-lg font-bold">📋 Student List</h3>
           {students.map((s) => {
             const studentAssignments = assignments.filter(a => a.student_id === s.id);
             const completed = studentAssignments.filter(a => a.status === "completed").length;
             const studentUsage = todayUsage.find(u => u.student_id === s.id);
             const isEditing = editingStudentId === s.id;
-            const isSelected = selectedStudentIds.has(s.id);
 
             return (
-              <Card key={s.id} className={`rounded-2xl kid-shadow ${isSelected ? "ring-2 ring-destructive/50" : ""}`}>
+              <Card key={s.id} className="rounded-2xl kid-shadow">
                 <CardContent className="pt-4 pb-3">
                   {isEditing ? (
                     <div className="space-y-3">
@@ -868,20 +793,12 @@ export default function AdminDashboard() {
                   ) : (
                     <>
                       <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleStudentSelection(s.id)}
-                            className="h-4 w-4 rounded accent-destructive cursor-pointer"
-                          />
-                          <div>
-                            <div className="font-bold text-lg">{s.display_name}</div>
-                            <div className="text-sm text-muted-foreground">ID: {s.student_id} | {s.daily_quota_minutes} min/day</div>
-                             <div className="text-xs text-muted-foreground">
-                               Difficulty: {s.difficulty_level} | Speed: {s.speech_speed} {s.korean_hint_mode ? "| 🇰🇷 Hints ON" : ""}
-                             </div>
-                          </div>
+                        <div>
+                          <div className="font-bold text-lg">{s.display_name}</div>
+                          <div className="text-sm text-muted-foreground">ID: {s.student_id} | {s.daily_quota_minutes} min/day</div>
+                           <div className="text-xs text-muted-foreground">
+                             Difficulty: {s.difficulty_level} | Speed: {s.speech_speed} {s.korean_hint_mode ? "| 🇰🇷 Hints ON" : ""}
+                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="rounded-full">
@@ -896,7 +813,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                       {studentUsage && (
-                        <div className="text-xs text-muted-foreground mt-1 ml-7">
+                        <div className="text-xs text-muted-foreground mt-1">
                           Today: {Math.floor(studentUsage.used_seconds / 60)}m {studentUsage.used_seconds % 60}s used
                         </div>
                       )}
@@ -1357,38 +1274,6 @@ export default function AdminDashboard() {
               onClick={() => deleteStudentId && deleteStudent(deleteStudentId)}
             >
               {deletingStudent ? "Deleting..." : "Delete Student"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bulk Delete Students Confirmation Dialog */}
-      <Dialog open={bulkDeleteStudentsOpen} onOpenChange={(open) => { if (!open) setBulkDeleteStudentsOpen(false); }}>
-        <DialogContent className="rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5" /> Delete {selectedStudentIds.size} Students
-            </DialogTitle>
-            <DialogDescription>
-              This will permanently delete <strong>{selectedStudentIds.size} student accounts</strong> and all their related data (assignments, practice logs, sessions, usage). This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="text-sm space-y-1 max-h-40 overflow-y-auto">
-            {students.filter(s => selectedStudentIds.has(s.id)).map(s => (
-              <div key={s.id} className="font-semibold">• {s.display_name || s.student_id}</div>
-            ))}
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" className="rounded-xl" onClick={() => setBulkDeleteStudentsOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              className="rounded-xl font-bold"
-              disabled={bulkDeletingStudents}
-              onClick={bulkDeleteStudents}
-            >
-              {bulkDeletingStudents ? (bulkDeleteProgress || "Deleting...") : `Delete ${selectedStudentIds.size} Students`}
             </Button>
           </DialogFooter>
         </DialogContent>
