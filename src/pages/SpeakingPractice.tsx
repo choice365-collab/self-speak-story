@@ -33,6 +33,22 @@ function containsKorean(text: string): boolean {
   return /[가-힣]/.test(text);
 }
 
+/** Renders text with quoted phrases highlighted in accent color */
+function HighlightedText({ text }: { text: string }) {
+  const parts = text.split(/(".*?")/g);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.startsWith('"') && part.endsWith('"') ? (
+          <span key={i} className="text-primary font-bold">{part}</span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
 // ── System instructions builder ──
 
 function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
@@ -418,7 +434,7 @@ export default function SpeakingPractice() {
             <Card className="max-w-[85%] rounded-2xl kid-shadow">
               <CardContent className="pt-3 pb-3 px-4">
                 <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
-                <p className="text-base whitespace-pre-wrap">{t.text}</p>
+                <p className="text-base whitespace-pre-wrap"><HighlightedText text={t.text} /></p>
               </CardContent>
             </Card>
           </div>
@@ -430,7 +446,7 @@ export default function SpeakingPractice() {
             <Card className="max-w-[85%] rounded-2xl kid-shadow border-accent/30">
               <CardContent className="pt-3 pb-3 px-4">
                 <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
-                <p className="text-base whitespace-pre-wrap">{streamingText}<span className="animate-pulse">▌</span></p>
+                <p className="text-base whitespace-pre-wrap"><HighlightedText text={streamingText} /><span className="animate-pulse">▌</span></p>
               </CardContent>
             </Card>
           </div>
