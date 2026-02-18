@@ -65,7 +65,8 @@ serve(async (req) => {
       });
     }
 
-    const { role, login_id, pin, password, display_name, daily_quota_minutes, difficulty_level, speech_speed } = await req.json();
+    const { role, login_id: rawId, pin, password, display_name, daily_quota_minutes, difficulty_level, speech_speed } = await req.json();
+    const login_id = (rawId || "").toLowerCase().trim();
 
     if (role === "student") {
       const email = `student_${login_id}@speakbyyourself.app`;
