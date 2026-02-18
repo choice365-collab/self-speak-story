@@ -421,6 +421,28 @@ export default function AdminDashboard() {
   };
 
 
+  // Convert DB verb_key "get_receive" → Excel format "get (=receive)"
+  const verbKeyToExcel = (vk: string): string => {
+    const idx = vk.indexOf("_");
+    if (idx > 0) {
+      const expr = vk.slice(0, idx);
+      const meaning = vk.slice(idx + 1).replace(/_/g, " ");
+      return `${expr} (=${meaning})`;
+    }
+    return vk;
+  };
+
+  // Convert Excel format "get (=receive)" → DB verb_key "get_receive"
+  const excelToVerbKey = (excel: string): string => {
+    const match = excel.match(/^(.+?)\s*\(=(.+)\)$/);
+    if (match) {
+      const expr = match[1].trim();
+      const meaning = match[2].trim().replace(/\s+/g, "_");
+      return `${expr}_${meaning}`;
+    }
+    return excel.trim();
+  };
+
   const downloadVerbLibrary = async () => {
     const { data, error } = await supabase
       .from("verbs")
@@ -430,7 +452,11 @@ export default function AdminDashboard() {
       toast.error(error?.message || "Failed to load verbs");
       return;
     }
-    const ws = XLSX.utils.json_to_sheet(data);
+    const excelData = data.map(row => ({
+      ...row,
+      verb_key: verbKeyToExcel(row.verb_key),
+    }));
+    const ws = XLSX.utils.json_to_sheet(excelData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "verbs");
     XLSX.writeFile(wb, "verb_library.xlsx");
@@ -451,7 +477,7 @@ export default function AdminDashboard() {
 
       const verbRows = rows.map((row: any) => {
         const base: any = {
-          verb_key: row.verb_key || "",
+          verb_key: excelToVerbKey(row.verb_key || ""),
           base_verb: row.base_verb || "",
           meaning_en: row.meaning_en || null,
           anchor_short_1: row.anchor_short_1 || null,
