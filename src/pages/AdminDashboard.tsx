@@ -108,6 +108,36 @@ export default function AdminDashboard() {
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [deleteAllConfirm, setDeleteAllConfirm] = useState("");
 
+  // Student delete
+  const [deleteStudentId, setDeleteStudentId] = useState<string | null>(null);
+  const [deletingStudent, setDeletingStudent] = useState(false);
+
+  const deleteStudent = async (studentId: string) => {
+    setDeletingStudent(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      if (!session) throw new Error("Not authenticated");
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ user_id: studentId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setStudents(prev => prev.filter(s => s.id !== studentId));
+      setAssignments(prev => prev.filter(a => a.student_id !== studentId));
+      setDeleteStudentId(null);
+      toast.success("Student deleted 🗑️");
+    } catch (e: any) {
+      toast.error(e.message || "Delete failed");
+    } finally {
+      setDeletingStudent(false);
+    }
+  };
+
   const cascadeDeleteVerbs = async (verbIds: string[]): Promise<{ verbs: number; assignments: number; logs: number; sessions: number }> => {
     let totalAssignments = 0, totalLogs = 0, totalSessions = 0;
     // Batch in chunks to avoid query limits
@@ -774,6 +804,9 @@ export default function AdminDashboard() {
                           <Button size="sm" variant="ghost" onClick={() => startEditStudent(s)} className="rounded-xl h-8 w-8 p-0">
                             <Pencil className="h-4 w-4" />
                           </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setDeleteStudentId(s.id)} className="rounded-xl h-8 w-8 p-0 text-destructive hover:text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                       {studentUsage && (
@@ -1208,6 +1241,36 @@ export default function AdminDashboard() {
               onClick={deleteAllVerbs}
             >
               {hardDeleting ? "Deleting..." : `Delete ALL ${verbs.length} Verbs`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Student Confirmation Dialog */}
+      <Dialog open={!!deleteStudentId} onOpenChange={(open) => { if (!open) setDeleteStudentId(null); }}>
+        <DialogContent className="rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" /> Delete Student
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete the student account, all assignments, practice logs, speaking sessions, and usage data. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="text-sm font-semibold">
+            Student: {students.find(s => s.id === deleteStudentId)?.display_name || students.find(s => s.id === deleteStudentId)?.student_id}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="rounded-xl" onClick={() => setDeleteStudentId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-xl font-bold"
+              disabled={deletingStudent}
+              onClick={() => deleteStudentId && deleteStudent(deleteStudentId)}
+            >
+              {deletingStudent ? "Deleting..." : "Delete Student"}
             </Button>
           </DialogFooter>
         </DialogContent>
