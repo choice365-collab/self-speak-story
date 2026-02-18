@@ -96,7 +96,7 @@ serve(async (req) => {
       const email = authUser.user.email!;
       const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
       const { data: signInData, error: signInError } = await anonClient.auth.signInWithPassword({
-        email, password,
+        email, password: password.toLowerCase(),
       });
 
       if (signInError) {
