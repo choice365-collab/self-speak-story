@@ -33,25 +33,33 @@ function containsKorean(text: string): boolean {
   return /[가-힣]/.test(text);
 }
 
-/** Renders text with quoted phrases highlighted in accent color */
+/** Renders text with quoted phrases highlighted and Korean hints styled */
 function HighlightedText({ text }: { text: string }) {
-  const parts = text.split(/(".*?")/g);
+  // Match: "quoted text" optionally followed by (Korean hint)
+  const parts = text.split(/(".*?"(?:\s*\([^)]*\))?)/g);
   return (
     <>
-      {parts.map((part, i) =>
-        part.startsWith('"') && part.endsWith('"') ? (
-          <span key={i} className="text-primary font-bold">{part}</span>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
+      {parts.map((part, i) => {
+        const match = part.match(/^(".*?")(\s*\(([^)]*)\))?$/);
+        if (match) {
+          return (
+            <span key={i}>
+              <span className="text-primary font-bold">{match[1]}</span>
+              {match[2] && (
+                <span className="text-muted-foreground text-sm font-semibold">{" "}({match[3]})</span>
+              )}
+            </span>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
     </>
   );
 }
 
 // ── System instructions builder ──
 
-function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
+function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string, koreanHintMode: boolean): string {
   const situations = [verb.situation_seed_1, verb.situation_seed_2, verb.situation_seed_3, verb.situation_seed_4].filter(Boolean);
   const shortExamples = [verb.anchor_short_1, verb.anchor_short_2, verb.anchor_short_3].filter(Boolean);
   const longExamples = [verb.anchor_long_1, verb.anchor_long_2, verb.anchor_long_3].filter(Boolean);
@@ -115,7 +123,11 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "",
     "Require 2-3 correct repetitions per sentence before moving on.",
     'After completing ALL situations, say "PRACTICE COMPLETE!" at the end.',
-  ].join("\n");
+    "",
+    koreanHintMode
+      ? 'KOREAN HINTS: After every quoted target sentence, add a Korean translation in parentheses. Example: "I got back home" (집에 돌아왔어). Always include this hint for every target sentence you present.'
+      : "",
+  ].filter(Boolean).join("\n");
 }
 
 // ── Component ──
@@ -266,6 +278,7 @@ export default function SpeakingPractice() {
       verbData,
       profile?.difficulty_level || "medium",
       profile?.speech_speed || "medium",
+      profile?.korean_hint_mode ?? false,
     );
 
     await connect({
