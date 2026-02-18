@@ -60,7 +60,8 @@ export default function AdminDashboard() {
   const [students, setStudents] = useState<Student[]>([]);
   const [verbs, setVerbs] = useState<Verb[]>([]);
   const [assignments, setAssignments] = useState<AssignmentView[]>([]);
-  const [creditBalance, setCreditBalance] = useState(0);
+  const [totalSessionSeconds, setTotalSessionSeconds] = useState(0);
+  const [totalSessionCount, setTotalSessionCount] = useState(0);
   const [todayUsage, setTodayUsage] = useState<DailyUsageRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -84,10 +85,8 @@ export default function AdminDashboard() {
     korean_hint_mode: boolean;
   }>({ display_name: "", pin: "", daily_quota_minutes: "", difficulty_level: "medium", speech_speed: "medium", korean_hint_mode: false });
 
-  // Credit adjustment
-  const [creditAmount, setCreditAmount] = useState("");
-  const [creditNote, setCreditNote] = useState("");
-  const [creditType, setCreditType] = useState("topup");
+  // Cost per minute estimate (OpenAI Realtime API: ~$0.06 input + ~$0.24 output)
+  const COST_PER_MINUTE = 0.30;
 
   // Task filter
   const [selectedStudentId, setSelectedStudentId] = useState<string>("");
@@ -193,18 +192,22 @@ export default function AdminDashboard() {
     setLoading(true);
     const today = new Date().toISOString().split("T")[0];
 
-    const [studentsRes, verbsRes, assignmentsRes, creditRes, usageRes] = await Promise.all([
+    const [studentsRes, verbsRes, assignmentsRes, sessionsRes, usageRes] = await Promise.all([
       supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed, korean_hint_mode").eq("role", "student"),
       supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, anchor_short_1, anchor_long_1, is_active, verb_no, display_no").order("verb_no", { ascending: true }),
       supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, completed_count, last_completed_score, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
-      supabase.from("credit_balance").select("balance_usd").limit(1).maybeSingle(),
+      supabase.from("speaking_sessions").select("duration_seconds"),
       supabase.from("daily_usage").select("student_id, used_seconds").eq("date", today),
     ]);
 
     if (studentsRes.data) setStudents(studentsRes.data as Student[]);
     if (verbsRes.data) setVerbs(verbsRes.data as Verb[]);
     if (assignmentsRes.data) setAssignments(assignmentsRes.data as any);
-    if (creditRes.data) setCreditBalance(Number(creditRes.data.balance_usd));
+    if (sessionsRes.data) {
+      const total = sessionsRes.data.reduce((sum, s) => sum + (s.duration_seconds || 0), 0);
+      setTotalSessionSeconds(total);
+      setTotalSessionCount(sessionsRes.data.length);
+    }
     if (usageRes.data) setTodayUsage(usageRes.data as DailyUsageRow[]);
     setLoading(false);
   };
@@ -532,41 +535,7 @@ export default function AdminDashboard() {
     e.target.value = "";
   };
 
-  const adjustCredit = async () => {
-    const amount = parseFloat(creditAmount);
-    if (!amount || isNaN(amount)) {
-      toast.error("Enter a valid amount");
-      return;
-    }
-
-    const signedAmount = creditType === "deduct" ? -Math.abs(amount) : Math.abs(amount);
-
-    const { error: eventError } = await supabase.from("credit_events").insert({
-      type: creditType,
-      amount_usd: signedAmount,
-      note: creditNote || null,
-    });
-    if (eventError) {
-      toast.error(eventError.message);
-      return;
-    }
-
-    const newBalance = creditBalance + signedAmount;
-    const { error: balanceError } = await supabase
-      .from("credit_balance")
-      .update({ balance_usd: newBalance, updated_at: new Date().toISOString() })
-      .not("id", "is", null);
-
-    if (balanceError) {
-      toast.error(balanceError.message);
-      return;
-    }
-
-    setCreditBalance(newBalance);
-    setCreditAmount("");
-    setCreditNote("");
-    toast.success(`Credit ${creditType === "deduct" ? "deducted" : "added"}! 💰`);
-  };
+  const estimatedCost = (totalSessionSeconds / 60) * COST_PER_MINUTE;
 
   if (loading) {
     return (
@@ -613,9 +582,9 @@ export default function AdminDashboard() {
         </Card>
         <Card className="rounded-2xl kid-shadow">
           <CardContent className="pt-4 pb-3 text-center">
-            <DollarSign className="h-8 w-8 mx-auto mb-1 text-success" />
-            <div className="text-3xl font-black">${creditBalance.toFixed(2)}</div>
-            <div className="text-sm font-semibold text-muted-foreground">Credits</div>
+            <DollarSign className="h-8 w-8 mx-auto mb-1 text-destructive" />
+            <div className="text-3xl font-black">${estimatedCost.toFixed(2)}</div>
+            <div className="text-sm font-semibold text-muted-foreground">Est. AI Cost</div>
           </CardContent>
         </Card>
       </div>
@@ -1083,28 +1052,28 @@ export default function AdminDashboard() {
         {/* Credits Tab */}
         <TabsContent value="credits" className="space-y-4">
           <Card className="rounded-2xl kid-shadow">
-            <CardHeader><CardTitle className="text-lg">💰 Credit Balance</CardTitle></CardHeader>
-            <CardContent>
-              <div className="text-4xl font-black text-center mb-4">${creditBalance.toFixed(2)}</div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl kid-shadow">
-            <CardHeader><CardTitle className="text-lg">➕ Adjust Credit</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <select value={creditType} onChange={(e) => setCreditType(e.target.value)}
-                className="w-full h-12 rounded-xl border bg-background px-3 text-base">
-                <option value="topup">Top Up</option>
-                <option value="deduct">Deduct</option>
-                <option value="adjust">Adjust</option>
-              </select>
-              <Input type="number" value={creditAmount} onChange={(e) => setCreditAmount(e.target.value)}
-                placeholder="Amount (USD)" className="h-12 rounded-xl text-base" step="0.01" />
-              <Input value={creditNote} onChange={(e) => setCreditNote(e.target.value)}
-                placeholder="Note (optional)" className="h-12 rounded-xl text-base" />
-              <Button onClick={adjustCredit} className="w-full h-12 rounded-xl font-bold text-base">
-                Apply Credit Change
-              </Button>
+            <CardHeader><CardTitle className="text-lg">📊 Estimated AI Usage</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-center space-y-1">
+                <div className="text-4xl font-black text-destructive">${estimatedCost.toFixed(2)}</div>
+                <div className="text-sm text-muted-foreground font-semibold">Estimated Total Cost</div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-muted rounded-xl p-3 text-center">
+                  <div className="text-2xl font-black">{Math.floor(totalSessionSeconds / 60)}</div>
+                  <div className="text-xs font-semibold text-muted-foreground">Total Minutes</div>
+                </div>
+                <div className="bg-muted rounded-xl p-3 text-center">
+                  <div className="text-2xl font-black">{totalSessionCount}</div>
+                  <div className="text-xs font-semibold text-muted-foreground">Sessions</div>
+                </div>
+              </div>
+              <div className="bg-muted/50 rounded-xl p-3 text-xs text-muted-foreground space-y-1">
+                <p className="font-semibold">💡 Cost Estimation</p>
+                <p>Based on OpenAI Realtime API pricing (~$0.30/min).</p>
+                <p>This is an approximation. Actual costs may vary.</p>
+                <p>Check <a href="https://platform.openai.com/usage" target="_blank" rel="noopener noreferrer" className="text-primary underline font-bold">OpenAI Dashboard</a> for exact billing.</p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
