@@ -39,6 +39,37 @@ serve(async (req) => {
       });
     }
 
+    // Handle DELETE for removing a student
+    if (req.method === "DELETE") {
+      const { user_id } = await req.json();
+      if (!user_id) {
+        return new Response(JSON.stringify({ error: "user_id required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Delete related data first (cascade)
+      await supabase.from("practice_logs").delete().eq("student_id", user_id);
+      await supabase.from("speaking_sessions").delete().eq("student_id", user_id);
+      await supabase.from("learning_history").delete().eq("student_id", user_id);
+      await supabase.from("daily_usage").delete().eq("student_id", user_id);
+      await supabase.from("assignments").delete().eq("student_id", user_id);
+      await supabase.from("user_roles").delete().eq("user_id", user_id);
+      await supabase.from("profiles").delete().eq("id", user_id);
+
+      // Delete auth user
+      const { error: deleteError } = await supabase.auth.admin.deleteUser(user_id);
+      if (deleteError) {
+        return new Response(JSON.stringify({ error: deleteError.message }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Handle PUT for updating existing student (PIN change)
     if (req.method === "PUT") {
       const { user_id, pin, student_id } = await req.json();
