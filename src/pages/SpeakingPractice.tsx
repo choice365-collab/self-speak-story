@@ -283,7 +283,7 @@ export default function SpeakingPractice() {
 
     await connect({
       instructions,
-      voice: "alloy",
+      voice: "shimmer",
       turnDetection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 3000 },
       inputAudioTranscription: { model: "gpt-4o-mini-transcribe" },
       speed: profile?.speech_speed || "medium",
