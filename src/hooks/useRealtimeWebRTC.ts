@@ -112,16 +112,15 @@ export function useRealtimeWebRTC() {
       if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
       if (audioCtxRef.current.state === "suspended") await audioCtxRef.current.resume();
 
-      // Unlock audio with a throwaway element, keep main element clean
-      const unlockAudio = document.createElement("audio");
-      unlockAudio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-      try { await unlockAudio.play(); } catch {}
-      unlockAudio.remove();
-
       const audio = document.createElement("audio");
       audio.autoplay = true;
       (audio as any).playsInline = true;
       document.body.appendChild(audio);
+      audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+      try { await audio.play(); } catch {}
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
       audioRef.current = audio;
 
       // 2. Mic with quality flags
