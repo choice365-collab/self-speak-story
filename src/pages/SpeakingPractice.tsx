@@ -59,23 +59,26 @@ function HighlightedText({ text }: { text: string }) {
 
 // ── System instructions builder ──
 
+// Round counts per phase — easy to adjust later
+const SHORT_ROUNDS = 3;
+const LONG_ROUNDS = 3;
+const SITUATION_ROUNDS = 3;
+
 function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string, koreanHintMode: boolean): string {
-  const situations = [verb.situation_seed_1, verb.situation_seed_2, verb.situation_seed_3, verb.situation_seed_4].filter(Boolean);
   const shortExamples = [verb.anchor_short_1, verb.anchor_short_2, verb.anchor_short_3].filter(Boolean);
   const longExamples = [verb.anchor_long_1, verb.anchor_long_2, verb.anchor_long_3].filter(Boolean);
-  const allExamples = [...shortExamples, ...longExamples];
+  const situations = [verb.situation_seed_1, verb.situation_seed_2, verb.situation_seed_3, verb.situation_seed_4].filter(Boolean);
 
-  const exList = allExamples.map((e, i) => "  " + (i + 1) + '. "' + e + '"').join("\n");
+  const shortList = shortExamples.map((e, i) => "  " + (i + 1) + '. "' + e + '"').join("\n");
+  const longList = longExamples.map((e, i) => "  " + (i + 1) + '. "' + e + '"').join("\n");
   const sitList = situations.map((s, i) => "  " + (i + 1) + ". " + s).join("\n");
 
-  // Difficulty only affects vocabulary/grammar choice — NOT sentence length or naturalness
   const difficultyGuides: Record<string, string> = {
-    low: "Use simple present and past tense. Use basic everyday words (go, eat, play, like, want, have). Avoid idioms and complex grammar.",
+    low: "Use simple present and past tense. Use basic everyday words. Avoid idioms and complex grammar.",
     medium: "Use common tenses (present, past, future, can/will). Use everyday vocabulary. You may introduce one new word per turn with context.",
     high: "Use natural varied grammar including present perfect, conditionals, phrasal verbs. Include occasional idioms and explain them naturally.",
   };
 
-  // Speed affects how much you say per turn — NOT awkward pausing
   const speedGuides: Record<string, string> = {
     slow: "Keep each turn to 1-2 short sentences. Speak clearly. Give the student plenty of time.",
     medium: "Keep each turn to 2-3 sentences. Speak at a comfortable pace.",
@@ -97,38 +100,57 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "",
     'TARGET VERB: "' + verb.base_verb + '"',
     "",
-    "Reference sentences (use these as targets for practice):",
-    exList,
+    "═══ LESSON STRUCTURE (3 Phases) ═══",
     "",
-    "Situation ideas:",
+    "You MUST follow these 3 phases IN ORDER. Do NOT skip ahead.",
+    "",
+    "────── PHASE 1: SHORT SENTENCES (" + SHORT_ROUNDS + " rounds) ──────",
+    "Short sentence targets:",
+    shortList,
+    "",
+    "For each round:",
+    "1. Pick one short sentence from the list above.",
+    "2. Say the sentence naturally and explain what it means in a simple, fun way (NO grammar terms).",
+    "3. Create a quick, relatable situation where the student would use this sentence.",
+    '4. Ask: "In this situation, how would you say it?"',
+    "5. If correct → praise and move to the next round.",
+    "6. If wrong → gently correct, say the right sentence, and ask them to repeat it once.",
+    "After " + SHORT_ROUNDS + " short sentences, move to Phase 2.",
+    "",
+    "────── PHASE 2: LONG SENTENCES (" + LONG_ROUNDS + " rounds) ──────",
+    "Long sentence targets:",
+    longList,
+    "",
+    "For each round:",
+    "1. Pick one long sentence from the list above.",
+    "2. Say the sentence naturally and explain what it means simply.",
+    "3. Create a situation where the student would use this longer sentence.",
+    '4. Ask: "How would you say it?"',
+    "5. If correct → praise and move on.",
+    "6. If wrong → correct gently, provide the right sentence, ask them to repeat once.",
+    "After " + LONG_ROUNDS + " long sentences, move to Phase 3.",
+    "",
+    "────── PHASE 3: FREE SITUATIONS (" + SITUATION_ROUNDS + " rounds) ──────",
+    "Situation seeds (expand these into vivid, detailed scenarios):",
     sitList,
     "",
-    "═══ HOW TO TEACH ═══",
-    "",
-    "STEP 1 — SET THE SCENE:",
-    "Pick one situation from the list above. Paint a vivid, relatable scenario in 2-3 sentences.",
-    'Then ask the student: "In this situation, how would you say it in English?"',
-    "Do NOT give them the answer yet. Let them try first.",
-    "",
-    "STEP 2 — RESPOND TO THEIR ATTEMPT:",
-    "• If they got it right or close: React with genuine enthusiasm! Briefly confirm and move on.",
-    "• If they struggled or got it wrong:",
-    '  - Acknowledge their effort ("Good try!")',
-    "  - Quote what they actually said, and naturally show the correct version.",
-    '  - Example: "You said \'I go yesterday\' — since it already happened, we say \'I went yesterday.\'"',
-    "  - Ask them to try the correct sentence once.",
-    "• If they are silent: Offer a hint. Break it down, give the first few words, or rephrase the situation.",
-    "",
-    "STEP 3 — NEXT SITUATION:",
-    "Once they've said it correctly, move to a new situation from the list (or create a fun new one using the same verb).",
-    "Keep cycling through different situations so the student practices the verb in varied contexts.",
+    "For each round:",
+    "1. Pick a situation seed and expand it into a fun, detailed 2-3 sentence scenario.",
+    "2. Ask the student how they would respond in English. Do NOT give the answer.",
+    "3. Listen to their response.",
+    "4. If correct → enthusiastic praise! Move to next situation.",
+    "5. If wrong or incomplete:",
+    '   - Acknowledge effort ("Good try!")',
+    "   - Quote what they said, then show the corrected version naturally.",
+    "   - Ask them to say the corrected sentence 2 times.",
+    "After " + SITUATION_ROUNDS + ' situations, say "PRACTICE COMPLETE!" to end the lesson.',
     "",
     "═══ RULES ═══",
-    "• Never just say 'Repeat after me.' Always create a situation FIRST, then let them try.",
+    "• Always create a situation FIRST, then let them try. Never just say 'Repeat after me.'",
     "• Fix only ONE mistake per turn. Keep corrections brief and natural.",
     "• Don't repeat yourself. If you already explained something, move forward.",
-    "• When the student interrupts you, stop and listen. Then respond to what they said — don't restart your previous sentence.",
-    '• After the student has successfully practiced in at least 3-4 different situations, say "PRACTICE COMPLETE!" to end the lesson.',
+    "• When the student interrupts, stop and listen. Respond to what they said.",
+    "• Track your progress: announce when moving between phases (e.g., 'Great! Now let\\'s try some longer sentences!').",
     koreanHintRule,
   ].filter(Boolean).join("\n");
 }
