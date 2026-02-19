@@ -93,6 +93,9 @@ export default function AdminDashboard() {
   const [taskRangeFrom, setTaskRangeFrom] = useState("");
   const [taskRangeTo, setTaskRangeTo] = useState("");
 
+  // Assignment management
+  const [assignSaving, setAssignSaving] = useState(false);
+
   // Verb filter & selection
   const [verbSearch, setVerbSearch] = useState("");
   const [verbFilterStatus, setVerbFilterStatus] = useState<"all" | "active" | "inactive">("all");
@@ -830,7 +833,7 @@ export default function AdminDashboard() {
           <Card className="rounded-2xl kid-shadow">
             <CardContent className="pt-4 pb-3">
               <p className="text-sm text-muted-foreground">
-                ✅ Assignments are created automatically when students or verbs are added.
+                ✅ Assignments are created automatically when students or verbs are added. You can also manually assign/unassign tasks per student below.
               </p>
             </CardContent>
           </Card>
@@ -860,6 +863,137 @@ export default function AdminDashboard() {
                   className="h-10 rounded-xl text-base"
                 />
               </div>
+
+              {/* Assign/Unassign Mode - only when student selected */}
+              {selectedStudentId && (
+                <div className="pt-2 border-t space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-bold">📝 Manage Assignments</span>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" className="rounded-xl text-xs" onClick={async () => {
+                        // Select All: assign all verbs not yet assigned
+                        setAssignSaving(true);
+                        try {
+                          const existingVerbIds = new Set(assignments.filter(a => a.student_id === selectedStudentId).map(a => a.verb_id));
+                          const toAssign = verbs.filter(v => !existingVerbIds.has(v.id));
+                          if (toAssign.length === 0) {
+                            toast.info("All tasks are already assigned");
+                            return;
+                          }
+                          const rows = toAssign.map(v => ({
+                            student_id: selectedStudentId,
+                            verb_id: v.id,
+                            assigned_by: user?.id,
+                            task_no: v.verb_no,
+                          }));
+                          const { data: inserted, error } = await supabase.from("assignments")
+                            .insert(rows)
+                            .select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, completed_count, last_completed_score, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)");
+                          if (error) throw error;
+                          if (inserted) setAssignments(prev => [...prev, ...(inserted as any)]);
+                          toast.success(`${toAssign.length} tasks assigned! ✅`);
+                        } catch (err: any) {
+                          toast.error(err.message || "Failed to assign");
+                        } finally {
+                          setAssignSaving(false);
+                        }
+                      }} disabled={assignSaving}>
+                        Select All
+                      </Button>
+                      <Button size="sm" variant="outline" className="rounded-xl text-xs" onClick={async () => {
+                        // Deselect All: remove all assignments for this student
+                        setAssignSaving(true);
+                        try {
+                          const studentAssigns = assignments.filter(a => a.student_id === selectedStudentId);
+                          if (studentAssigns.length === 0) {
+                            toast.info("No tasks are assigned");
+                            return;
+                          }
+                          const ids = studentAssigns.map(a => a.id);
+                          // Delete in chunks
+                          for (let i = 0; i < ids.length; i += 50) {
+                            const chunk = ids.slice(i, i + 50);
+                            const { error } = await supabase.from("assignments").delete().in("id", chunk);
+                            if (error) throw error;
+                          }
+                          setAssignments(prev => prev.filter(a => a.student_id !== selectedStudentId));
+                          toast.success(`${studentAssigns.length} tasks unassigned! 🗑️`);
+                        } catch (err: any) {
+                          toast.error(err.message || "Failed to unassign");
+                        } finally {
+                          setAssignSaving(false);
+                        }
+                      }} disabled={assignSaving}>
+                        Deselect All
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Verb checklist */}
+                  <div className="max-h-64 overflow-y-auto space-y-1 rounded-xl border p-2">
+                    {(() => {
+                      const studentAssignmentMap = new Map(
+                        assignments.filter(a => a.student_id === selectedStudentId).map(a => [a.verb_id, a])
+                      );
+                      const from = parseInt(taskRangeFrom);
+                      const to = parseInt(taskRangeTo);
+                      const filteredVerbs = verbs.filter(v => {
+                        const no = v.display_no ?? v.verb_no;
+                        if (!isNaN(from) && no < from) return false;
+                        if (!isNaN(to) && no > to) return false;
+                        return true;
+                      });
+                      return filteredVerbs.map(v => {
+                        const assigned = studentAssignmentMap.has(v.id);
+                        const assignment = studentAssignmentMap.get(v.id);
+                        return (
+                          <label key={v.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors ${!v.is_active ? "opacity-50" : ""}`}>
+                            <input
+                              type="checkbox"
+                              checked={assigned}
+                              disabled={assignSaving}
+                              onChange={async () => {
+                                setAssignSaving(true);
+                                try {
+                                  if (assigned && assignment) {
+                                    // Unassign
+                                    const { error } = await supabase.from("assignments").delete().eq("id", assignment.id);
+                                    if (error) throw error;
+                                    setAssignments(prev => prev.filter(a => a.id !== assignment.id));
+                                  } else {
+                                    // Assign
+                                    const { data: inserted, error } = await supabase.from("assignments")
+                                      .insert({
+                                        student_id: selectedStudentId,
+                                        verb_id: v.id,
+                                        assigned_by: user?.id,
+                                        task_no: v.verb_no,
+                                      })
+                                      .select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, completed_count, last_completed_score, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)")
+                                      .single();
+                                    if (error) throw error;
+                                    if (inserted) setAssignments(prev => [...prev, inserted as any]);
+                                  }
+                                } catch (err: any) {
+                                  toast.error(err.message || "Failed");
+                                } finally {
+                                  setAssignSaving(false);
+                                }
+                              }}
+                              className="h-4 w-4 rounded accent-primary shrink-0"
+                            />
+                            <span className="text-xs font-black text-primary shrink-0">#{v.display_no ?? v.verb_no}</span>
+                            <span className="text-sm font-semibold truncate">{formatVerbKey(v.verb_key, v.meaning_en)}</span>
+                          </label>
+                        );
+                      });
+                    })()}
+                  </div>
+                  <div className="text-xs text-muted-foreground text-center">
+                    {assignments.filter(a => a.student_id === selectedStudentId).length} / {verbs.length} assigned
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
