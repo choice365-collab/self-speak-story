@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Mic, MicOff, PhoneOff, CheckCircle, History } from "lucide-react";
+import { ArrowLeft, Mic, MicOff, PhoneOff, CheckCircle, History, Captions, CaptionsOff } from "lucide-react";
 import { formatVerbKey } from "@/lib/formatVerbKey";
 import { type CorrectionEntry } from "@/lib/evaluateAttempt";
 import { useRealtimeWebRTC, type TranscriptEntry } from "@/hooks/useRealtimeWebRTC";
@@ -171,6 +171,7 @@ export default function SpeakingPractice() {
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [userMuted, setUserMuted] = useState(false);
   const [showCorrections, setShowCorrections] = useState(false);
+  const [showSubtitles, setShowSubtitles] = useState(true);
   const [correctionHistory, setCorrectionHistory] = useState<CorrectionEntry[]>(() => {
     try {
       const stored = localStorage.getItem("corrections_" + assignmentId);
@@ -402,6 +403,9 @@ export default function SpeakingPractice() {
               <History className="h-4 w-4" />
             </Button>
           )}
+          <Button variant="ghost" size="icon" onClick={() => setShowSubtitles(!showSubtitles)} className="rounded-xl shrink-0" title={showSubtitles ? "Hide subtitles" : "Show subtitles"}>
+            {showSubtitles ? <Captions className="h-4 w-4" /> : <CaptionsOff className="h-4 w-4" />}
+          </Button>
           <Badge variant="outline" className={"rounded-full text-xs " + (isConnected ? "border-secondary text-secondary" : connectionState === "error" ? "border-destructive text-destructive" : "")}>
             {connectionState}
           </Badge>
@@ -470,7 +474,7 @@ export default function SpeakingPractice() {
         )}
 
         {/* AI Subtitles — finalized */}
-        {transcripts.filter((t) => t.role === "assistant").map((t, i) => (
+        {showSubtitles && transcripts.filter((t) => t.role === "assistant").map((t, i) => (
           <div key={i} className="flex justify-start">
             <Card className="max-w-[85%] rounded-2xl kid-shadow">
               <CardContent className="pt-3 pb-3 px-4">
@@ -482,7 +486,7 @@ export default function SpeakingPractice() {
         ))}
 
         {/* Streaming subtitle (current AI speech) */}
-        {streamingText && (
+        {showSubtitles && streamingText && (
           <div className="flex justify-start">
             <Card className="max-w-[85%] rounded-2xl kid-shadow border-accent/30">
               <CardContent className="pt-3 pb-3 px-4">
