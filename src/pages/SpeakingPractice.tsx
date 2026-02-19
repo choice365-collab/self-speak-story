@@ -147,6 +147,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "",
     "═══ RULES ═══",
     "• Always create a situation FIRST, then let them try. Never just say 'Repeat after me.'",
+    "• When creating a situation, match WHO the student would say the sentence to. If the target sentence is advice to someone else, put a friend/family member in the scene. If it's something you'd say to yourself, set a solo scenario. The listener must fit the sentence.",
     "• Fix only ONE mistake per turn. Keep corrections brief and natural.",
     "• Don't repeat yourself. If you already explained something, move forward.",
     "• When the student interrupts, stop and listen. Respond to what they said.",
