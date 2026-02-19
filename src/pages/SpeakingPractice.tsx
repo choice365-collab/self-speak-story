@@ -280,11 +280,13 @@ export default function SpeakingPractice() {
     if (corrMatch && youSaid) {
       addCorrection({ timestamp: Date.now(), targetSentence: corrMatch[1].trim(), studentTranscript: youSaid[1].trim(), correctedSentence: corrMatch[1].trim(), feedbackLevel: "Try Again" });
     }
-    if (text.includes("PRACTICE COMPLETE")) handleCompletion();
+    if (text.toUpperCase().includes("PRACTICE COMPLETE")) handleCompletion();
   }, [addCorrection]);
 
   const handleUserTranscript = useCallback((text: string) => {
     totalAudioSecondsRef.current += 5;
+    // Add user speech to transcript display
+    setTranscripts((prev) => [...prev, { role: "user", text, timestamp: Date.now() }]);
     if (containsKorean(text)) {
       sendUserText('The student said something in Korean: "' + text + '". Infer what they meant. Respond ONLY in English.');
     }
@@ -469,13 +471,15 @@ export default function SpeakingPractice() {
           <div className="text-center text-sm text-destructive font-semibold">🔇 Microphone muted — tap mic button to unmute</div>
         )}
 
-        {/* AI Subtitles — finalized */}
-        {transcripts.filter((t) => t.role === "assistant").map((t, i) => (
-          <div key={i} className="flex justify-start">
-            <Card className="max-w-[85%] rounded-2xl kid-shadow">
+        {/* Conversation transcripts */}
+        {transcripts.map((t, i) => (
+          <div key={i} className={"flex " + (t.role === "assistant" ? "justify-start" : "justify-end")}>
+            <Card className={"max-w-[85%] rounded-2xl kid-shadow " + (t.role === "user" ? "bg-secondary/10 border-secondary/30" : "")}>
               <CardContent className="pt-3 pb-3 px-4">
-                <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
-                <p className="text-base whitespace-pre-wrap"><HighlightedText text={t.text} /></p>
+                <p className="text-sm font-semibold mb-1">{t.role === "assistant" ? "🤖 Teacher" : "🎤 You"}</p>
+                <p className="text-base whitespace-pre-wrap">
+                  {t.role === "assistant" ? <HighlightedText text={t.text} /> : t.text}
+                </p>
               </CardContent>
             </Card>
           </div>
