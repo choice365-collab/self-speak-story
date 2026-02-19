@@ -263,9 +263,9 @@ export default function SpeakingPractice() {
 
   // ── Callbacks ──
 
-  const handleAiTextDelta = useCallback((delta: string) => {
-    streamingTextRef.current += delta;
-    setStreamingText(streamingTextRef.current);
+  const handleAiTextDelta = useCallback((_delta: string) => {
+    // Intentionally no-op: subtitles appear only after AI finishes speaking
+    // so the student focuses on listening first.
   }, []);
 
   const handleAiTranscriptDone = useCallback((text: string) => {
