@@ -280,7 +280,7 @@ export default function SpeakingPractice() {
     if (corrMatch && youSaid) {
       addCorrection({ timestamp: Date.now(), targetSentence: corrMatch[1].trim(), studentTranscript: youSaid[1].trim(), correctedSentence: corrMatch[1].trim(), feedbackLevel: "Try Again" });
     }
-    if (text.toUpperCase().includes("PRACTICE COMPLETE")) handleCompletion();
+    if (text.includes("PRACTICE COMPLETE")) handleCompletion();
   }, [addCorrection]);
 
   const handleUserTranscript = useCallback((text: string) => {
@@ -317,12 +317,8 @@ export default function SpeakingPractice() {
       onAiTranscriptDone: handleAiTranscriptDone,
       onUserTranscript: handleUserTranscript,
       onStateChange: (state) => {
-        // On barge-in: save partial streaming text before clearing
+        // Clear streaming buffer on barge-in
         if (state === "STUDENT_SPEAKING") {
-          const partial = streamingTextRef.current.trim();
-          if (partial) {
-            setTranscripts((prev) => [...prev, { role: "assistant", text: partial + " …", timestamp: Date.now() }]);
-          }
           streamingTextRef.current = "";
           setStreamingText("");
         }
