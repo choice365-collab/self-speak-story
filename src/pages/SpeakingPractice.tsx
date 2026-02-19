@@ -60,9 +60,9 @@ function HighlightedText({ text }: { text: string }) {
 // ── System instructions builder ──
 
 // Round counts per phase — easy to adjust later
-const SHORT_ROUNDS = 3;
-const LONG_ROUNDS = 3;
-const SITUATION_ROUNDS = 3;
+const SHORT_ROUNDS = 2;
+const LONG_ROUNDS = 2;
+const SITUATION_ROUNDS = 2;
 
 function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string, koreanHintMode: boolean): string {
   const shortExamples = [verb.anchor_short_1, verb.anchor_short_2, verb.anchor_short_3].filter(Boolean);
