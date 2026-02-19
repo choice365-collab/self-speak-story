@@ -211,15 +211,15 @@ export function useRealtimeWebRTC() {
             setMicTrackEnabled(false);
           }
 
-          // ── STREAMING SUBTITLE DELTA (prefer text over audio transcript) ──
-          if (type === "response.text.delta" && ev.delta) {
+          // ── STREAMING SUBTITLE DELTA ──
+          if (type === "response.audio_transcript.delta" && ev.delta) {
             callbacksRef.current.onAiTextDelta?.(ev.delta);
           }
 
-          // ── FULL TRANSCRIPT DONE (prefer text over audio transcript) ──
-          if (type === "response.text.done" && ev.text) {
-            console.log("[debug] text.done");
-            callbacksRef.current.onAiTranscriptDone?.(ev.text.trim());
+          // ── FULL TRANSCRIPT DONE ──
+          if (type === "response.audio_transcript.done" && ev.transcript) {
+            console.log("[debug] transcript.done");
+            callbacksRef.current.onAiTranscriptDone?.(ev.transcript.trim());
           }
 
           // ── AUDIO DELTA — re-attach stream if cleared by barge-in ──

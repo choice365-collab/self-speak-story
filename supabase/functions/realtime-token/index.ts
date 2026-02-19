@@ -35,7 +35,6 @@ serve(async (req) => {
         model,
         voice,
         speed: speedValue,
-        modalities: ["audio", "text"],
         ...(instructions ? { instructions } : {}),
         ...(turn_detection ? { turn_detection } : {}),
         ...(input_audio_transcription ? { input_audio_transcription } : {}),
