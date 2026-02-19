@@ -481,7 +481,17 @@ export default function SpeakingPractice() {
           </div>
         ))}
 
-        {/* Subtitle appears after AI finishes speaking (no streaming) */}
+        {/* Streaming subtitle (current AI speech) */}
+        {streamingText && (
+          <div className="flex justify-start">
+            <Card className="max-w-[85%] rounded-2xl kid-shadow border-accent/30">
+              <CardContent className="pt-3 pb-3 px-4">
+                <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
+                <p className="text-base whitespace-pre-wrap"><HighlightedText text={streamingText} /><span className="animate-pulse">▌</span></p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <div ref={messagesEndRef} />
       </div>
