@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Mic, MicOff, PhoneOff, CheckCircle, History, Captions, CaptionsOff, Languages } from "lucide-react";
+import { ArrowLeft, Mic, MicOff, PhoneOff, CheckCircle, History, Captions, CaptionsOff } from "lucide-react";
 import { formatVerbKey } from "@/lib/formatVerbKey";
 import { type CorrectionEntry } from "@/lib/evaluateAttempt";
 import { useRealtimeWebRTC, type TranscriptEntry } from "@/hooks/useRealtimeWebRTC";
@@ -173,9 +172,6 @@ export default function SpeakingPractice() {
   const [userMuted, setUserMuted] = useState(false);
   const [showCorrections, setShowCorrections] = useState(false);
   const [showSubtitles, setShowSubtitles] = useState(true);
-  // Korean hint: student can toggle only if admin enabled it
-  const adminKoreanHintEnabled = profile?.korean_hint_mode ?? false;
-  const [studentKoreanHint, setStudentKoreanHint] = useState(true); // default ON when allowed
   const [correctionHistory, setCorrectionHistory] = useState<CorrectionEntry[]>(() => {
     try {
       const stored = localStorage.getItem("corrections_" + assignmentId);
@@ -309,7 +305,7 @@ export default function SpeakingPractice() {
       verbData,
       profile?.difficulty_level || "medium",
       profile?.speech_speed || "medium",
-      adminKoreanHintEnabled && studentKoreanHint,
+      profile?.korean_hint_mode ?? false,
     );
 
     await connect({
@@ -339,7 +335,7 @@ export default function SpeakingPractice() {
     });
 
     sessionStartRef.current = Date.now();
-  }, [verbData, profile, adminKoreanHintEnabled, studentKoreanHint, connect, handleAiTextDelta, handleAiTranscriptDone, handleUserTranscript, setMicEnabled]);
+  }, [verbData, profile, connect, handleAiTextDelta, handleAiTranscriptDone, handleUserTranscript, setMicEnabled]);
 
   const toggleMute = useCallback(() => {
     if (isAiSpeaking) return;
@@ -410,17 +406,6 @@ export default function SpeakingPractice() {
           <Button variant="ghost" size="icon" onClick={() => setShowSubtitles(!showSubtitles)} className="rounded-xl shrink-0" title={showSubtitles ? "Hide subtitles" : "Show subtitles"}>
             {showSubtitles ? <Captions className="h-4 w-4" /> : <CaptionsOff className="h-4 w-4" />}
           </Button>
-          {adminKoreanHintEnabled && (
-            <Button
-              variant={studentKoreanHint ? "default" : "ghost"}
-              size="icon"
-              onClick={() => setStudentKoreanHint(!studentKoreanHint)}
-              className="rounded-xl shrink-0"
-              title={studentKoreanHint ? "Korean hints ON" : "Korean hints OFF"}
-            >
-              <Languages className="h-4 w-4" />
-            </Button>
-          )}
           <Badge variant="outline" className={"rounded-full text-xs " + (isConnected ? "border-secondary text-secondary" : connectionState === "error" ? "border-destructive text-destructive" : "")}>
             {connectionState}
           </Badge>
