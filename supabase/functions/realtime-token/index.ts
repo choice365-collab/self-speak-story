@@ -21,8 +21,9 @@ serve(async (req) => {
 
     const { model = "gpt-4o-mini-realtime-preview", voice = "alloy", instructions, turn_detection, input_audio_transcription, speed } = await req.json().catch(() => ({}));
 
-    // Speed is handled via instructions prompt (~30% slower overall)
-    // The instructions already contain pace guidance per speed level
+    // Map speed label to OpenAI speed value (0.7 ~ 1.3)
+    const speedMap: Record<string, number> = { slow: 0.8, medium: 1.0, fast: 1.2 };
+    const speedValue = speedMap[speed] ?? 1.0;
 
     const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
       method: "POST",
@@ -33,6 +34,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model,
         voice,
+        speed: speedValue,
         ...(instructions ? { instructions } : {}),
         ...(turn_detection ? { turn_detection } : {}),
         ...(input_audio_transcription ? { input_audio_transcription } : {}),
