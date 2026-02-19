@@ -74,9 +74,9 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
   const sitList = situations.map((s, i) => "  " + (i + 1) + ". " + s).join("\n");
 
   const difficultyGuides: Record<string, string> = {
-    low: "Speak at the level of a 5-year-old American child. Use only simple, everyday words and short sentences.",
-    medium: "Speak at the level of a 7-year-old American child. Use common vocabulary and natural sentence patterns.",
-    high: "Speak at the level of a 9-year-old American child. You may use richer vocabulary and more complex sentences.",
+    low: "Use simple present and past tense. Use basic everyday words. Avoid idioms and complex grammar.",
+    medium: "Use common tenses (present, past, future, can/will). Use everyday vocabulary. You may introduce one new word per turn with context.",
+    high: "Use natural varied grammar including present perfect, conditionals, phrasal verbs. Include occasional idioms and explain them naturally.",
   };
 
   const speedGuides: Record<string, string> = {
