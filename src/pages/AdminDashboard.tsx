@@ -871,13 +871,20 @@ export default function AdminDashboard() {
                     <span className="text-sm font-bold">📝 Manage Assignments</span>
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" className="rounded-xl text-xs" onClick={async () => {
-                        // Select All: assign all verbs not yet assigned
                         setAssignSaving(true);
                         try {
+                          const from = parseInt(taskRangeFrom);
+                          const to = parseInt(taskRangeTo);
+                          const visibleVerbs = verbs.filter(v => {
+                            const no = v.display_no ?? v.verb_no;
+                            if (!isNaN(from) && no < from) return false;
+                            if (!isNaN(to) && no > to) return false;
+                            return true;
+                          });
                           const existingVerbIds = new Set(assignments.filter(a => a.student_id === selectedStudentId).map(a => a.verb_id));
-                          const toAssign = verbs.filter(v => !existingVerbIds.has(v.id));
+                          const toAssign = visibleVerbs.filter(v => !existingVerbIds.has(v.id));
                           if (toAssign.length === 0) {
-                            toast.info("All tasks are already assigned");
+                            toast.info("All visible tasks are already assigned");
                             return;
                           }
                           const rows = toAssign.map(v => ({
@@ -901,23 +908,30 @@ export default function AdminDashboard() {
                         Select All
                       </Button>
                       <Button size="sm" variant="outline" className="rounded-xl text-xs" onClick={async () => {
-                        // Deselect All: remove all assignments for this student
                         setAssignSaving(true);
                         try {
-                          const studentAssigns = assignments.filter(a => a.student_id === selectedStudentId);
-                          if (studentAssigns.length === 0) {
-                            toast.info("No tasks are assigned");
+                          const from = parseInt(taskRangeFrom);
+                          const to = parseInt(taskRangeTo);
+                          const visibleVerbIds = new Set(verbs.filter(v => {
+                            const no = v.display_no ?? v.verb_no;
+                            if (!isNaN(from) && no < from) return false;
+                            if (!isNaN(to) && no > to) return false;
+                            return true;
+                          }).map(v => v.id));
+                          const toRemove = assignments.filter(a => a.student_id === selectedStudentId && visibleVerbIds.has(a.verb_id));
+                          if (toRemove.length === 0) {
+                            toast.info("No visible tasks are assigned");
                             return;
                           }
-                          const ids = studentAssigns.map(a => a.id);
-                          // Delete in chunks
+                          const ids = toRemove.map(a => a.id);
                           for (let i = 0; i < ids.length; i += 50) {
                             const chunk = ids.slice(i, i + 50);
                             const { error } = await supabase.from("assignments").delete().in("id", chunk);
                             if (error) throw error;
                           }
-                          setAssignments(prev => prev.filter(a => a.student_id !== selectedStudentId));
-                          toast.success(`${studentAssigns.length} tasks unassigned! 🗑️`);
+                          const removeSet = new Set(ids);
+                          setAssignments(prev => prev.filter(a => !removeSet.has(a.id)));
+                          toast.success(`${toRemove.length} tasks unassigned! 🗑️`);
                         } catch (err: any) {
                           toast.error(err.message || "Failed to unassign");
                         } finally {
