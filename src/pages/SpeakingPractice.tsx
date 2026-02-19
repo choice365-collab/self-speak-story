@@ -304,8 +304,9 @@ export default function SpeakingPractice() {
         }
       },
       onReady: (_send) => {
-        // No initial text needed — the system instructions already guide the AI to start the lesson.
-        // Sending text here would cause duplicate first responses.
+        // Trigger AI's first response without sending user text.
+        // The system instructions guide what the AI says.
+        _send("Start the lesson now.");
       },
     });
 
