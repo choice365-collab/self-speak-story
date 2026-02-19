@@ -118,9 +118,7 @@ export function useRealtimeWebRTC() {
       document.body.appendChild(audio);
       audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
       try { await audio.play(); } catch {}
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
+      audio.src = "";
       audioRef.current = audio;
 
       // 2. Mic with quality flags
