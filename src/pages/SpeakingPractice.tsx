@@ -33,9 +33,8 @@ function containsKorean(text: string): boolean {
   return /[가-힣]/.test(text);
 }
 
-/** Renders text with quoted phrases highlighted and Korean hints styled.
- *  If seenQuotes Set is provided, only the FIRST occurrence of each quoted phrase is highlighted. */
-function HighlightedText({ text, seenQuotes }: { text: string; seenQuotes?: Set<string> }) {
+/** Renders text with quoted phrases highlighted and Korean hints styled */
+function HighlightedText({ text }: { text: string }) {
   // Match: "quoted text" optionally followed by (Korean hint)
   const parts = text.split(/(".*?"(?:\s*\([^)]*\))?)/g);
   return (
@@ -43,21 +42,14 @@ function HighlightedText({ text, seenQuotes }: { text: string; seenQuotes?: Set<
       {parts.map((part, i) => {
         const match = part.match(/^(".*?")(\s*\(([^)]*)\))?$/);
         if (match) {
-          const phrase = match[1];
-          const isFirst = !seenQuotes || !seenQuotes.has(phrase);
-          if (seenQuotes) seenQuotes.add(phrase);
-          if (isFirst) {
-            return (
-              <span key={i}>
-                <span className="text-primary font-bold">{phrase}</span>
-                {match[2] && (
-                  <span className="text-muted-foreground text-sm font-semibold">{" "}({match[3]})</span>
-                )}
-              </span>
-            );
-          }
-          // Duplicate — render as plain text (no highlight, no hint)
-          return <span key={i}>{phrase}</span>;
+          return (
+            <span key={i}>
+              <span className="text-primary font-bold">{match[1]}</span>
+              {match[2] && (
+                <span className="text-muted-foreground text-sm font-semibold">{" "}({match[3]})</span>
+              )}
+            </span>
+          );
         }
         return <span key={i}>{part}</span>;
       })}
@@ -477,37 +469,29 @@ export default function SpeakingPractice() {
           <div className="text-center text-sm text-destructive font-semibold">🔇 Microphone muted — tap mic button to unmute</div>
         )}
 
-        {/* AI Subtitles — finalized + streaming, with first-occurrence-only highlighting */}
-        {(() => {
-          const seen = new Set<string>();
-          const assistantTranscripts = transcripts.filter((t) => t.role === "assistant");
-          return (
-            <>
-              {assistantTranscripts.map((t, i) => (
-                <div key={i} className="flex justify-start">
-                  <Card className="max-w-[85%] rounded-2xl kid-shadow">
-                    <CardContent className="pt-3 pb-3 px-4">
-                      <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
-                      <p className="text-base whitespace-pre-wrap"><HighlightedText text={t.text} seenQuotes={seen} /></p>
-                    </CardContent>
-                  </Card>
-                </div>
-              ))}
+        {/* AI Subtitles — finalized */}
+        {transcripts.filter((t) => t.role === "assistant").map((t, i) => (
+          <div key={i} className="flex justify-start">
+            <Card className="max-w-[85%] rounded-2xl kid-shadow">
+              <CardContent className="pt-3 pb-3 px-4">
+                <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
+                <p className="text-base whitespace-pre-wrap"><HighlightedText text={t.text} /></p>
+              </CardContent>
+            </Card>
+          </div>
+        ))}
 
-              {/* Streaming subtitle (current AI speech) */}
-              {streamingText && (
-                <div className="flex justify-start">
-                  <Card className="max-w-[85%] rounded-2xl kid-shadow border-accent/30">
-                    <CardContent className="pt-3 pb-3 px-4">
-                      <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
-                      <p className="text-base whitespace-pre-wrap"><HighlightedText text={streamingText} seenQuotes={seen} /><span className="animate-pulse">▌</span></p>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-            </>
-          );
-        })()}
+        {/* Streaming subtitle (current AI speech) */}
+        {streamingText && (
+          <div className="flex justify-start">
+            <Card className="max-w-[85%] rounded-2xl kid-shadow border-accent/30">
+              <CardContent className="pt-3 pb-3 px-4">
+                <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
+                <p className="text-base whitespace-pre-wrap"><HighlightedText text={streamingText} /><span className="animate-pulse">▌</span></p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <div ref={messagesEndRef} />
       </div>
