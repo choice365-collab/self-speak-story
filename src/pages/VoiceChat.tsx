@@ -34,8 +34,9 @@ export default function VoiceChat() {
     streamingTextRef.current = "";
     setStreamingText("");
     connect({
-      onAiTextDelta: (_delta) => {
-        // No-op: subtitles appear only after AI finishes speaking
+      onAiTextDelta: (delta) => {
+        streamingTextRef.current += delta;
+        setStreamingText(streamingTextRef.current);
       },
       onAiTranscriptDone: (text) => {
         setTranscripts((prev) => [...prev, { role: "assistant", text, timestamp: Date.now() }]);

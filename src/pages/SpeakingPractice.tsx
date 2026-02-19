@@ -263,9 +263,9 @@ export default function SpeakingPractice() {
 
   // ── Callbacks ──
 
-  const handleAiTextDelta = useCallback((_delta: string) => {
-    // Intentionally no-op: subtitles appear only after AI finishes speaking
-    // so the student focuses on listening first.
+  const handleAiTextDelta = useCallback((delta: string) => {
+    streamingTextRef.current += delta;
+    setStreamingText(streamingTextRef.current);
   }, []);
 
   const handleAiTranscriptDone = useCallback((text: string) => {
@@ -469,20 +469,29 @@ export default function SpeakingPractice() {
           <div className="text-center text-sm text-destructive font-semibold">🔇 Microphone muted — tap mic button to unmute</div>
         )}
 
-        {/* AI Subtitle — show only the latest finalized AI message */}
-        {(() => {
-          const lastAi = [...transcripts].reverse().find((t) => t.role === "assistant");
-          return lastAi ? (
-            <div key={lastAi.timestamp} className="flex justify-start animate-fade-in">
-              <Card className="max-w-[85%] rounded-2xl kid-shadow">
-                <CardContent className="pt-3 pb-3 px-4">
-                  <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
-                  <p className="text-base whitespace-pre-wrap"><HighlightedText text={lastAi.text} /></p>
-                </CardContent>
-              </Card>
-            </div>
-          ) : null;
-        })()}
+        {/* AI Subtitles — finalized */}
+        {transcripts.filter((t) => t.role === "assistant").map((t, i) => (
+          <div key={i} className="flex justify-start">
+            <Card className="max-w-[85%] rounded-2xl kid-shadow">
+              <CardContent className="pt-3 pb-3 px-4">
+                <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
+                <p className="text-base whitespace-pre-wrap"><HighlightedText text={t.text} /></p>
+              </CardContent>
+            </Card>
+          </div>
+        ))}
+
+        {/* Streaming subtitle (current AI speech) */}
+        {streamingText && (
+          <div className="flex justify-start">
+            <Card className="max-w-[85%] rounded-2xl kid-shadow border-accent/30">
+              <CardContent className="pt-3 pb-3 px-4">
+                <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
+                <p className="text-base whitespace-pre-wrap"><HighlightedText text={streamingText} /><span className="animate-pulse">▌</span></p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <div ref={messagesEndRef} />
       </div>
