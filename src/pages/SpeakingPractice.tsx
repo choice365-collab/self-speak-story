@@ -281,7 +281,7 @@ export default function SpeakingPractice() {
     if (corrMatch && youSaid) {
       addCorrection({ timestamp: Date.now(), targetSentence: corrMatch[1].trim(), studentTranscript: youSaid[1].trim(), correctedSentence: corrMatch[1].trim(), feedbackLevel: "Try Again" });
     }
-    if (text.includes("PRACTICE COMPLETE")) handleCompletion();
+    if (text.includes("PRACTICE COMPLETE")) handleCompletion(false);
   }, [addCorrection]);
 
   const handleUserTranscript = useCallback((text: string) => {
@@ -345,7 +345,7 @@ export default function SpeakingPractice() {
     setMicEnabled(!next);
   }, [isAiSpeaking, userMuted, setMicEnabled]);
 
-  const handleCompletion = async () => {
+  const handleCompletion = async (autoDisconnect = true) => {
     setIsComplete(true);
     const totalSessionSeconds = Math.floor((Date.now() - sessionStartRef.current) / 1000);
     await updateDailyUsage(totalAudioSecondsRef.current);
@@ -357,7 +357,9 @@ export default function SpeakingPractice() {
     if (user) {
       await supabase.from("speaking_sessions").insert({ student_id: user.id, assignment_id: assignmentId, duration_seconds: totalSessionSeconds });
     }
-    setTimeout(() => disconnect(), 2000);
+    if (autoDisconnect) {
+      setTimeout(() => disconnect(), 2000);
+    }
   };
 
   // ── Early returns ──
@@ -504,7 +506,7 @@ export default function SpeakingPractice() {
       {/* Controls — fixed bottom */}
       <div className="flex-shrink-0 border-t p-4">
         {isComplete ? (
-          <Button onClick={() => navigate("/")} className="w-full h-16 text-xl font-bold rounded-2xl kid-shadow">🎉 Great Job! Go Back</Button>
+          <Button onClick={() => { disconnect(); navigate("/"); }} className="w-full h-16 text-xl font-bold rounded-2xl kid-shadow">🎉 Great Job! Go Back</Button>
         ) : connectionState === "idle" ? (
           <Button onClick={handleStart} className="w-full h-16 text-lg font-bold rounded-2xl kid-shadow gap-2">
             <Mic className="h-6 w-6" /> Start Talking 🎤
