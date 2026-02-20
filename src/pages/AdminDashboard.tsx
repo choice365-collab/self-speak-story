@@ -277,7 +277,15 @@ export default function AdminDashboard() {
 
   // Filtered assignments for Tasks tab
   const filteredAssignments = assignments.filter(a => {
-    if (selectedStudentId && a.student_id !== selectedStudentId) return false;
+    if (selectedStudentId) {
+      if (selectedStudentId.startsWith("group:")) {
+        const groupName = selectedStudentId.replace("group:", "");
+        const groupStudentIds = new Set(students.filter(s => s.group_name === groupName).map(s => s.id));
+        if (!groupStudentIds.has(a.student_id)) return false;
+      } else {
+        if (a.student_id !== selectedStudentId) return false;
+      }
+    }
     const from = parseInt(taskRangeFrom);
     const to = parseInt(taskRangeTo);
     if (!isNaN(from) && a.task_no < from) return false;
@@ -901,16 +909,15 @@ export default function AdminDashboard() {
                 <option value="">All Students</option>
                 {(() => {
                   const groups = [...new Set(students.map(s => s.group_name))].sort();
-                  return groups.map(g => (
-                    <optgroup key={g} label={g}>
-                      {students
-                        .filter(s => s.group_name === g)
-                        .sort((a, b) => (a.display_name || a.student_id || "").localeCompare(b.display_name || b.student_id || ""))
-                        .map(s => (
-                          <option key={s.id} value={s.id}>{s.display_name || s.student_id}</option>
-                        ))}
-                    </optgroup>
-                  ));
+                  return groups.flatMap(g => [
+                    <option key={`group:${g}`} value={`group:${g}`}>📁 {g} ({students.filter(s => s.group_name === g).length})</option>,
+                    ...students
+                      .filter(s => s.group_name === g)
+                      .sort((a, b) => (a.display_name || a.student_id || "").localeCompare(b.display_name || b.student_id || ""))
+                      .map(s => (
+                        <option key={s.id} value={s.id}>&nbsp;&nbsp;&nbsp;{s.display_name || s.student_id}</option>
+                      )),
+                  ]);
                 })()}
               </select>
               <div className="flex gap-2">
@@ -929,7 +936,7 @@ export default function AdminDashboard() {
               {/* Assign/Unassign Mode */}
               <div className="pt-2 border-t space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold">📝 Manage Assignments {!selectedStudentId && "(All Students)"}</span>
+                  <span className="text-sm font-bold">📝 Manage Assignments {!selectedStudentId ? "(All Students)" : selectedStudentId.startsWith("group:") ? `(${selectedStudentId.replace("group:", "")})` : ""}</span>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" className="rounded-xl text-xs" onClick={async () => {
                       setAssignSaving(true);
@@ -942,7 +949,9 @@ export default function AdminDashboard() {
                           if (!isNaN(to) && no > to) return false;
                           return true;
                         });
-                        const targetStudents = selectedStudentId ? [{ id: selectedStudentId }] : students;
+                        const targetStudents = selectedStudentId.startsWith("group:") 
+                          ? students.filter(s => s.group_name === selectedStudentId.replace("group:", ""))
+                          : selectedStudentId ? [{ id: selectedStudentId }] : students;
                         let totalAssigned = 0;
                         for (const student of targetStudents) {
                           const existingVerbIds = new Set(assignments.filter(a => a.student_id === student.id).map(a => a.verb_id));
@@ -984,7 +993,9 @@ export default function AdminDashboard() {
                           if (!isNaN(to) && no > to) return false;
                           return true;
                         }).map(v => v.id));
-                        const targetStudentIds = selectedStudentId ? new Set([selectedStudentId]) : new Set(students.map(s => s.id));
+                        const targetStudentIds = selectedStudentId.startsWith("group:")
+                          ? new Set(students.filter(s => s.group_name === selectedStudentId.replace("group:", "")).map(s => s.id))
+                          : selectedStudentId ? new Set([selectedStudentId]) : new Set(students.map(s => s.id));
                         const toRemove = assignments.filter(a => targetStudentIds.has(a.student_id) && visibleVerbIds.has(a.verb_id));
                         if (toRemove.length === 0) {
                           toast.info("No visible tasks are assigned");
@@ -1010,8 +1021,8 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Verb checklist - only for specific student */}
-                {selectedStudentId && (
+                {/* Verb checklist - only for specific student (not group) */}
+                {selectedStudentId && !selectedStudentId.startsWith("group:") && (
                   <>
                     <div className="max-h-64 overflow-y-auto space-y-1 rounded-xl border p-2">
                       {(() => {
