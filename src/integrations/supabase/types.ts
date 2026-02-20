@@ -288,6 +288,7 @@ export type Database = {
           id: string
           session_date: string
           student_id: string
+          student_transcripts: string[] | null
         }
         Insert: {
           assignment_id?: string | null
@@ -296,6 +297,7 @@ export type Database = {
           id?: string
           session_date?: string
           student_id: string
+          student_transcripts?: string[] | null
         }
         Update: {
           assignment_id?: string | null
@@ -304,6 +306,7 @@ export type Database = {
           id?: string
           session_date?: string
           student_id?: string
+          student_transcripts?: string[] | null
         }
         Relationships: [
           {

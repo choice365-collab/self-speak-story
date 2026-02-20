@@ -188,6 +188,7 @@ export default function SpeakingPractice() {
   const sessionStartRef = useRef(Date.now());
   const userMutedRef = useRef(false);
   const streamingTextRef = useRef("");
+  const userTranscriptsRef = useRef<string[]>([]);
 
   // Hook
   const {
@@ -290,6 +291,9 @@ export default function SpeakingPractice() {
 
   const handleUserTranscript = useCallback((text: string) => {
     totalAudioSecondsRef.current += 5;
+    if (text.trim()) {
+      userTranscriptsRef.current.push(text.trim());
+    }
     if (containsKorean(text)) {
       sendUserText('The student said something in Korean: "' + text + '". Infer what they meant. Respond ONLY in English.');
     }
@@ -304,6 +308,7 @@ export default function SpeakingPractice() {
     setTranscripts([]);
     setStreamingText("");
     streamingTextRef.current = "";
+    userTranscriptsRef.current = [];
 
     const instructions = buildSystemInstructions(
       verbData,
@@ -358,7 +363,12 @@ export default function SpeakingPractice() {
     await supabase.from("assignments").update({ status: "completed", completed_at: new Date().toISOString(), completed_count: newCount }).eq("id", assignmentId);
 
     if (user) {
-      await supabase.from("speaking_sessions").insert({ student_id: user.id, assignment_id: assignmentId, duration_seconds: totalSessionSeconds });
+      await supabase.from("speaking_sessions").insert({
+        student_id: user.id,
+        assignment_id: assignmentId,
+        duration_seconds: totalSessionSeconds,
+        student_transcripts: userTranscriptsRef.current,
+      } as any);
     }
     if (autoDisconnect) {
       setTimeout(() => disconnect(), 2000);
