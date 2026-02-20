@@ -13,6 +13,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import * as XLSX from "xlsx";
 
 type Student = {
@@ -110,6 +111,9 @@ export default function AdminDashboard() {
   const [bulkHardDeleteConfirm, setBulkHardDeleteConfirm] = useState("");
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [deleteAllConfirm, setDeleteAllConfirm] = useState("");
+
+  // Auto-assign toggle
+  const [autoAssign, setAutoAssign] = useState(true);
 
   // Student delete
   const [deleteStudentId, setDeleteStudentId] = useState<string | null>(null);
@@ -225,15 +229,19 @@ export default function AdminDashboard() {
     setLoading(true);
     const today = new Date().toISOString().split("T")[0];
 
-    const [studentsRes, verbsRes, assignmentsRes, sessionsRes, usageRes] = await Promise.all([
+    const [studentsRes, verbsRes, assignmentsRes, sessionsRes, usageRes, autoAssignRes] = await Promise.all([
       supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed, korean_hint_mode").eq("role", "student"),
       supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, anchor_short_1, anchor_long_1, is_active, verb_no, display_no").order("verb_no", { ascending: true }),
       supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, completed_count, last_completed_score, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
       supabase.from("speaking_sessions").select("duration_seconds"),
       supabase.from("daily_usage").select("student_id, used_seconds").eq("date", today),
+      supabase.from("admin_settings").select("value").eq("key", "auto_assign_enabled").maybeSingle(),
     ]);
 
     if (studentsRes.data) setStudents(studentsRes.data as Student[]);
+    if (autoAssignRes.data) {
+      setAutoAssign(autoAssignRes.data.value !== "false");
+    }
     if (verbsRes.data) setVerbs(verbsRes.data as Verb[]);
     if (assignmentsRes.data) setAssignments(assignmentsRes.data as any);
     if (sessionsRes.data) {
@@ -257,6 +265,11 @@ export default function AdminDashboard() {
       return;
     }
     setAssignments(prev => prev.map(a => a.id === assignmentId ? { ...a, is_enabled: !currentEnabled } : a));
+  };
+
+  const toggleAutoAssign = async (checked: boolean) => {
+    setAutoAssign(checked);
+    await supabase.from("admin_settings").upsert({ key: "auto_assign_enabled", value: String(checked) }, { onConflict: "key" });
   };
 
   // Filtered assignments for Tasks tab
@@ -567,7 +580,7 @@ export default function AdminDashboard() {
         newVerbIds = (insertedVerbs || []) as { id: string; verb_no: number }[];
       }
 
-      if (newVerbIds.length > 0 && students.length > 0) {
+      if (autoAssign && newVerbIds.length > 0 && students.length > 0) {
         for (const s of students) {
           const { data: existing } = await supabase
             .from("assignments").select("verb_id").eq("student_id", s.id);
@@ -850,9 +863,16 @@ export default function AdminDashboard() {
         <TabsContent value="tasks" className="space-y-4">
           <Card className="rounded-2xl kid-shadow">
             <CardContent className="pt-4 pb-3">
-              <p className="text-sm text-muted-foreground">
-                ✅ Assignments are created automatically when students or verbs are added. You can also manually assign/unassign tasks per student below.
-              </p>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <Checkbox
+                  checked={autoAssign}
+                  onCheckedChange={(checked) => toggleAutoAssign(!!checked)}
+                  className="mt-0.5"
+                />
+                <span className="text-sm text-muted-foreground">
+                  Assignments are created automatically when students or verbs are added. You can also manually assign/unassign tasks per student below.
+                </span>
+              </label>
             </CardContent>
           </Card>
 
