@@ -152,6 +152,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "",
     "═══ RULES ═══",
     koreanHintRule,
+    "• QUESTION INTONATION RULE: When you ask a question, it MUST be a SHORT, STANDALONE sentence — never embedded inside a longer sentence. Break it out on its own so the voice engine reads it with proper rising intonation. BAD: 'Now I want you to think about what you would say if someone asked you do you have any pizza?' GOOD: 'Imagine you\\'re at a pizza shop. The worker looks at you. What would you say?' Keep each question under 10 words when possible.",
     "• Always create a situation FIRST, then let them try. Never just say 'Repeat after me.'",
     "• When creating a situation, match WHO the student would say the sentence to. If the target sentence is advice to someone else, put a friend/family member in the scene. If it's something you'd say to yourself, set a solo scenario. The listener must fit the sentence.",
     "• Fix only ONE mistake per turn. Keep corrections brief and natural.",
