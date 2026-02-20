@@ -74,9 +74,9 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
   const sitList = situations.map((s, i) => "  " + (i + 1) + ". " + s).join("\n");
 
   const difficultyGuides: Record<string, string> = {
-    low: "Speak as if your student is a 5-year-old American child. Naturally adjust your vocabulary, sentence length, and grammar to what a 5-year-old would understand.",
+    low: "Speak as if your student is a 4-year-old American child. Naturally adjust your vocabulary, sentence length, and grammar to what a 4-year-old would understand.",
     medium: "Speak as if your student is a 7-year-old American child. Naturally adjust your vocabulary, sentence length, and grammar to what a 7-year-old would understand.",
-    high: "Speak as if your student is a 9-year-old American child. Naturally adjust your vocabulary, sentence length, and grammar to what a 9-year-old would understand.",
+    high: "Speak as if your student is a 10-year-old American child. Naturally adjust your vocabulary, sentence length, and grammar to what a 10-year-old would understand.",
   };
 
   const speedGuides: Record<string, string> = {

@@ -16,9 +16,9 @@ serve(async (req) => {
     let systemPrompt = "";
 
     const difficultyGuides: Record<string, string> = {
-      low: "Use only simple sentences. Avoid complex grammar. Use basic vocabulary.",
-      medium: "Use moderate grammar complexity with common expressions.",
-      high: "Use natural, varied grammar including idioms and complex sentences.",
+      low: "Speak as if your student is a 4-year-old American child. Use very short, simple sentences with basic vocabulary a 4-year-old would understand.",
+      medium: "Speak as if your student is a 7-year-old American child. Use moderate grammar with common expressions a 7-year-old would understand.",
+      high: "Speak as if your student is a 10-year-old American child. Use natural, varied grammar including some idioms and complex sentences a 10-year-old would understand.",
     };
     const speedGuides: Record<string, string> = {
       slow: "Keep responses SHORT (1-2 sentences). Use simple words.",
