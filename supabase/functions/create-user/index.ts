@@ -132,20 +132,27 @@ serve(async (req) => {
         role: "student",
       });
 
-      // Auto-assign all active verbs
-      const { data: allVerbs } = await supabase
-        .from("verbs")
-        .select("id, verb_no")
-        .eq("is_active", true)
-        .order("verb_no", { ascending: true });
-      if (allVerbs && allVerbs.length > 0) {
-        const assignmentRows = allVerbs.map((v: any) => ({
-          student_id: newUser.user.id,
-          verb_id: v.id,
-          assigned_by: caller.id,
-          task_no: v.verb_no,
-        }));
-        await supabase.from("assignments").insert(assignmentRows);
+      // Check auto-assign setting
+      const { data: autoAssignSetting } = await supabase
+        .from("admin_settings").select("value").eq("key", "auto_assign_enabled").maybeSingle();
+      const autoAssignEnabled = !autoAssignSetting || autoAssignSetting.value !== "false";
+
+      if (autoAssignEnabled) {
+        // Auto-assign all active verbs
+        const { data: allVerbs } = await supabase
+          .from("verbs")
+          .select("id, verb_no")
+          .eq("is_active", true)
+          .order("verb_no", { ascending: true });
+        if (allVerbs && allVerbs.length > 0) {
+          const assignmentRows = allVerbs.map((v: any) => ({
+            student_id: newUser.user.id,
+            verb_id: v.id,
+            assigned_by: caller.id,
+            task_no: v.verb_no,
+          }));
+          await supabase.from("assignments").insert(assignmentRows);
+        }
       }
 
       return new Response(JSON.stringify({ success: true, user_id: newUser.user.id }), {
