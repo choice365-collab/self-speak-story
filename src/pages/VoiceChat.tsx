@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -125,8 +126,12 @@ export default function VoiceChat() {
               <Button
                 onClick={toggleMute}
                 variant={userMuted ? "destructive" : "outline"}
-                className="h-16 w-16 rounded-2xl kid-shadow cursor-pointer hover:!bg-[unset] hover:!text-[unset]"
-                style={userMuted ? { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' } : undefined}
+                className={cn(
+                  "h-16 w-16 rounded-2xl kid-shadow cursor-pointer",
+                  userMuted
+                    ? "hover:!bg-destructive hover:!text-destructive-foreground active:!bg-destructive"
+                    : "hover:!bg-background hover:!text-foreground active:!bg-background"
+                )}
                 disabled={!isConnected || isAiSpeaking}
               >
                 {userMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
