@@ -63,8 +63,7 @@ export default function AdminDashboard() {
   const [students, setStudents] = useState<Student[]>([]);
   const [verbs, setVerbs] = useState<Verb[]>([]);
   const [assignments, setAssignments] = useState<AssignmentView[]>([]);
-  const [totalSessionSeconds, setTotalSessionSeconds] = useState(0);
-  const [totalSessionCount, setTotalSessionCount] = useState(0);
+  const [sessionData, setSessionData] = useState<{ session_date: string; duration_seconds: number }[]>([]);
   const [todayUsage, setTodayUsage] = useState<DailyUsageRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -236,7 +235,7 @@ export default function AdminDashboard() {
       supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed, korean_hint_mode, group_name").eq("role", "student"),
       supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, anchor_short_1, anchor_long_1, is_active, verb_no, display_no").order("verb_no", { ascending: true }),
       supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, completed_count, last_completed_score, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
-      supabase.from("speaking_sessions").select("duration_seconds"),
+      supabase.from("speaking_sessions").select("session_date, duration_seconds"),
       supabase.from("daily_usage").select("student_id, used_seconds").eq("date", today),
       supabase.from("admin_settings").select("value").eq("key", "auto_assign_enabled").maybeSingle(),
     ]);
@@ -248,9 +247,7 @@ export default function AdminDashboard() {
     if (verbsRes.data) setVerbs(verbsRes.data as Verb[]);
     if (assignmentsRes.data) setAssignments(assignmentsRes.data as any);
     if (sessionsRes.data) {
-      const total = sessionsRes.data.reduce((sum, s) => sum + (s.duration_seconds || 0), 0);
-      setTotalSessionSeconds(total);
-      setTotalSessionCount(sessionsRes.data.length);
+      setSessionData(sessionsRes.data as { session_date: string; duration_seconds: number }[]);
     }
     if (usageRes.data) setTodayUsage(usageRes.data as DailyUsageRow[]);
     setLoading(false);
@@ -621,9 +618,51 @@ export default function AdminDashboard() {
       toast.error(err.message || "Upload failed");
     }
     e.target.value = "";
+  // KST date boundaries
+  const getKSTDateBoundaries = () => {
+    const now = new Date();
+    const kstOffset = 9 * 60 * 60 * 1000;
+    const kstNow = new Date(now.getTime() + kstOffset);
+    const kstTodayStr = kstNow.toISOString().split("T")[0]; // YYYY-MM-DD in KST
+
+    // 최근 2일: 어제 00:00 KST
+    const kstYesterday = new Date(kstNow);
+    kstYesterday.setUTCDate(kstYesterday.getUTCDate() - 1);
+    const twoDayStart = kstYesterday.toISOString().split("T")[0];
+
+    // 최근 일주일: 이번주 월요일 00:00 KST
+    const kstDay = kstNow.getUTCDay(); // 0=Sun
+    const daysSinceMonday = kstDay === 0 ? 6 : kstDay - 1;
+    const kstMonday = new Date(kstNow);
+    kstMonday.setUTCDate(kstMonday.getUTCDate() - daysSinceMonday);
+    const weekStart = kstMonday.toISOString().split("T")[0];
+
+    // 최근 한달: 이번달 1일 00:00 KST
+    const monthStart = kstTodayStr.slice(0, 7) + "-01";
+
+    return { twoDayStart, weekStart, monthStart };
   };
 
-  const estimatedCost = (totalSessionSeconds / 60) * COST_PER_MINUTE;
+  const { twoDayStart, weekStart, monthStart } = getKSTDateBoundaries();
+
+  const filterSessions = (startDate: string) => {
+    return sessionData.filter(s => s.session_date >= startDate);
+  };
+
+  const twoDaySessions = filterSessions(twoDayStart);
+  const weekSessions = filterSessions(weekStart);
+  const monthSessions = filterSessions(monthStart);
+
+  const calcCost = (sessions: typeof sessionData) => {
+    const totalSec = sessions.reduce((sum, s) => sum + (s.duration_seconds || 0), 0);
+    return { seconds: totalSec, count: sessions.length, cost: (totalSec / 60) * COST_PER_MINUTE };
+  };
+
+  const twoDayStats = calcCost(twoDaySessions);
+  const weekStats = calcCost(weekSessions);
+  const monthStats = calcCost(monthSessions);
+
+  const estimatedCost = weekStats.cost;
 
   if (loading) {
     return (
@@ -672,7 +711,7 @@ export default function AdminDashboard() {
           <CardContent className="pt-4 pb-3 text-center">
             <DollarSign className="h-8 w-8 mx-auto mb-1 text-destructive" />
             <div className="text-3xl font-black">${estimatedCost.toFixed(2)}</div>
-            <div className="text-sm font-semibold text-muted-foreground">Est. AI Cost</div>
+            <div className="text-sm font-semibold text-muted-foreground">Est. AI Cost (Week)</div>
           </CardContent>
         </Card>
       </div>
@@ -1367,20 +1406,28 @@ export default function AdminDashboard() {
           <Card className="rounded-2xl kid-shadow">
             <CardHeader><CardTitle className="text-lg">📊 Estimated AI Usage</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="text-center space-y-1">
-                <div className="text-4xl font-black text-destructive">${estimatedCost.toFixed(2)}</div>
-                <div className="text-sm text-muted-foreground font-semibold">Estimated Total Cost</div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-muted rounded-xl p-3 text-center">
-                  <div className="text-2xl font-black">{Math.floor(totalSessionSeconds / 60)}</div>
-                  <div className="text-xs font-semibold text-muted-foreground">Total Minutes</div>
+              {[
+                { label: "Recent 2 Days", stats: twoDayStats },
+                { label: "This Week", stats: weekStats },
+                { label: "This Month", stats: monthStats },
+              ].map(({ label, stats }) => (
+                <div key={label} className="border rounded-xl p-4 space-y-2">
+                  <div className="text-center space-y-1">
+                    <div className="text-3xl font-black text-destructive">${stats.cost.toFixed(2)}</div>
+                    <div className="text-sm text-muted-foreground font-semibold">{label}</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-muted rounded-lg p-2 text-center">
+                      <div className="text-lg font-black">{Math.floor(stats.seconds / 60)}</div>
+                      <div className="text-xs text-muted-foreground">Minutes</div>
+                    </div>
+                    <div className="bg-muted rounded-lg p-2 text-center">
+                      <div className="text-lg font-black">{stats.count}</div>
+                      <div className="text-xs text-muted-foreground">Sessions</div>
+                    </div>
+                  </div>
                 </div>
-                <div className="bg-muted rounded-xl p-3 text-center">
-                  <div className="text-2xl font-black">{totalSessionCount}</div>
-                  <div className="text-xs font-semibold text-muted-foreground">Sessions</div>
-                </div>
-              </div>
+              ))}
               <div className="bg-muted/50 rounded-xl p-3 text-xs text-muted-foreground space-y-1">
                 <p className="font-semibold">💡 Cost Estimation</p>
                 <p>Based on OpenAI Realtime API pricing (~$0.30/min).</p>
