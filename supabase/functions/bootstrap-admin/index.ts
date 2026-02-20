@@ -22,8 +22,13 @@ serve(async (req) => {
       .limit(1);
 
     if (existingAdmins && existingAdmins.length > 0) {
-      return new Response(JSON.stringify({ error: "Admin already exists" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      // Reset password for existing admin
+      const { error: resetError } = await supabase.auth.admin.updateUserById(existingAdmins[0].id, {
+        password: "admin1234",
+      });
+      if (resetError) throw resetError;
+      return new Response(JSON.stringify({ success: true, message: "Admin password reset to admin1234" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
