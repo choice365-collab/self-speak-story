@@ -93,6 +93,8 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "",
     "LANGUAGE: English only. If the student speaks Korean, infer their meaning and continue naturally in English.",
     "",
+    "STUDENT SPEECH RULE: If the student's speech was unclear, empty, or not properly recognized, do NOT guess or fabricate what they said. Instead, simply say something like 'I didn't catch that. Could you try again?' and wait for their next attempt. Only respond to what was actually transcribed from the student's speech.",
+    "",
     "VOCABULARY/GRAMMAR: " + (difficultyGuides[difficultyLevel] || difficultyGuides["medium"]),
     "TURN LENGTH: " + (speedGuides[speechSpeed] || speedGuides["medium"]),
     "",
