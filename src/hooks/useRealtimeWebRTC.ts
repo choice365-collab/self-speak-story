@@ -231,16 +231,11 @@ export function useRealtimeWebRTC() {
             if (convStateRef.current !== "AI_SPEAKING") setConvState("AI_SPEAKING");
           }
 
-          // ── RESPONSE DONE — open mic for next turn (with delay for audio buffer flush) ──
+          // ── RESPONSE DONE — open mic for next turn ──
           if (type === "response.done") {
-            console.log("[debug] response.done — waiting for audio buffer to flush");
+            console.log("[debug] response.done");
             setConvState("IDLE");
-            // Delay mic re-enable to let buffered audio finish playing
-            // Prevents false VAD triggers from cutting off the last sentence
-            setTimeout(() => {
-              setMicTrackEnabled(true);
-              console.log("[debug] mic re-enabled after buffer flush delay");
-            }, 2000);
+            setMicTrackEnabled(true);
           }
 
           // ── USER TRANSCRIPT ──
