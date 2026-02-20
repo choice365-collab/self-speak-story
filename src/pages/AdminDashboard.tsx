@@ -1062,50 +1062,82 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Verb checklist - only for specific student (not group) */}
-                {selectedStudentId && !selectedStudentId.startsWith("group:") && (
-                  <>
-                    <div className="max-h-64 overflow-y-auto space-y-1 rounded-xl border p-2">
-                      {(() => {
-                        const studentAssignmentMap = new Map(
-                          assignments.filter(a => a.student_id === selectedStudentId).map(a => [a.verb_id, a])
-                        );
-                        const from = parseInt(taskRangeFrom);
-                        const to = parseInt(taskRangeTo);
-                        const filteredVerbs = verbs.filter(v => {
-                          const no = v.display_no ?? v.verb_no;
-                          if (!isNaN(from) && no < from) return false;
-                          if (!isNaN(to) && no > to) return false;
-                          return true;
-                        });
-                        return filteredVerbs.map(v => {
-                          const assigned = studentAssignmentMap.has(v.id);
-                          const assignment = studentAssignmentMap.get(v.id);
+                {/* Verb checklist - for all selection modes */}
+                {(() => {
+                  const isIndividual = selectedStudentId && !selectedStudentId.startsWith("group:");
+                  const isGroup = selectedStudentId.startsWith("group:");
+                  const targetStudentIds = isGroup
+                    ? students.filter(s => s.group_name === selectedStudentId.replace("group:", "")).map(s => s.id)
+                    : isIndividual
+                      ? [selectedStudentId]
+                      : students.map(s => s.id);
+                  const targetSet = new Set(targetStudentIds);
+                  const targetCount = targetStudentIds.length;
+
+                  const from = parseInt(taskRangeFrom);
+                  const to = parseInt(taskRangeTo);
+                  const filteredVerbs = verbs.filter(v => {
+                    const no = v.display_no ?? v.verb_no;
+                    if (!isNaN(from) && no < from) return false;
+                    if (!isNaN(to) && no > to) return false;
+                    return true;
+                  });
+
+                  // Build verb -> assignments map for target students
+                  const verbAssignMap = new Map<string, AssignmentView[]>();
+                  for (const a of assignments) {
+                    if (!targetSet.has(a.student_id)) continue;
+                    const list = verbAssignMap.get(a.verb_id) || [];
+                    list.push(a);
+                    verbAssignMap.set(a.verb_id, list);
+                  }
+
+                  const totalAssigned = assignments.filter(a => targetSet.has(a.student_id)).length;
+
+                  return (
+                    <>
+                      <div className="max-h-64 overflow-y-auto space-y-1 rounded-xl border p-2">
+                        {filteredVerbs.map(v => {
+                          const verbAssigns = verbAssignMap.get(v.id) || [];
+                          const assignedCount = verbAssigns.length;
+                          const allAssigned = assignedCount >= targetCount && targetCount > 0;
+
                           return (
                             <label key={v.id} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors ${!v.is_active ? "opacity-50" : ""}`}>
                               <input
                                 type="checkbox"
-                                checked={assigned}
+                                checked={allAssigned}
                                 disabled={assignSaving}
                                 onChange={async () => {
                                   setAssignSaving(true);
                                   try {
-                                    if (assigned && assignment) {
-                                      const { error } = await supabase.from("assignments").delete().eq("id", assignment.id);
-                                      if (error) throw error;
-                                      setAssignments(prev => prev.filter(a => a.id !== assignment.id));
+                                    if (allAssigned) {
+                                      // Remove assignments for all target students
+                                      const ids = verbAssigns.map(a => a.id);
+                                      for (let i = 0; i < ids.length; i += 50) {
+                                        const chunk = ids.slice(i, i + 50);
+                                        const { error } = await supabase.from("assignments").delete().in("id", chunk);
+                                        if (error) throw error;
+                                      }
+                                      const removeSet = new Set(ids);
+                                      setAssignments(prev => prev.filter(a => !removeSet.has(a.id)));
                                     } else {
-                                      const { data: inserted, error } = await supabase.from("assignments")
-                                        .insert({
-                                          student_id: selectedStudentId,
+                                      // Add assignments for target students who don't have it
+                                      const assignedStudentIds = new Set(verbAssigns.map(a => a.student_id));
+                                      const toInsert = targetStudentIds.filter(sid => !assignedStudentIds.has(sid));
+                                      if (toInsert.length > 0) {
+                                        const rows = toInsert.map(sid => ({
+                                          student_id: sid,
                                           verb_id: v.id,
                                           assigned_by: user?.id,
                                           task_no: v.verb_no,
-                                        })
-                                        .select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, completed_count, last_completed_score, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)")
-                                        .single();
-                                      if (error) throw error;
-                                      if (inserted) setAssignments(prev => [...prev, inserted as any]);
+                                        }));
+                                        const { data: inserted, error } = await supabase.from("assignments")
+                                          .insert(rows)
+                                          .select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, completed_count, last_completed_score, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)");
+                                        if (error) throw error;
+                                        if (inserted) setAssignments(prev => [...prev, ...(inserted as any)]);
+                                      }
                                     }
                                   } catch (err: any) {
                                     toast.error(err.message || "Failed");
@@ -1117,16 +1149,19 @@ export default function AdminDashboard() {
                               />
                               <span className="text-xs font-black text-primary shrink-0">#{v.display_no ?? v.verb_no}</span>
                               <span className="text-sm font-semibold truncate">{formatVerbKey(v.verb_key, v.meaning_en)}</span>
+                              {!isIndividual && assignedCount > 0 && !allAssigned && (
+                                <span className="text-xs text-muted-foreground ml-auto shrink-0">{assignedCount}/{targetCount}</span>
+                              )}
                             </label>
                           );
-                        });
-                      })()}
-                    </div>
-                    <div className="text-xs text-muted-foreground text-center">
-                      {assignments.filter(a => a.student_id === selectedStudentId).length} / {verbs.length} assigned
-                    </div>
-                  </>
-                )}
+                        })}
+                      </div>
+                      <div className="text-xs text-muted-foreground text-center">
+                        {totalAssigned} / {verbs.length * targetCount} assigned{!isIndividual && ` (${targetCount} students)`}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </CardContent>
           </Card>
