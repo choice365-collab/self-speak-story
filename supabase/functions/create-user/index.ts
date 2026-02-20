@@ -98,7 +98,13 @@ serve(async (req) => {
     }
 
     const { role, login_id: rawId, pin, password, display_name, daily_quota_minutes, difficulty_level, speech_speed, group_name } = await req.json();
-    const login_id = (rawId || "").toLowerCase().trim();
+    const login_id = (rawId || "").toLowerCase().trim().replace(/[^a-z0-9_-]/g, "");
+
+    if (!login_id) {
+      return new Response(JSON.stringify({ error: "Invalid login_id: must contain alphanumeric characters" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (role === "student") {
       const email = `student_${login_id}@speakbyyourself.app`;
