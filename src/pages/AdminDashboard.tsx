@@ -24,6 +24,7 @@ type Student = {
   difficulty_level: string;
   speech_speed: string;
   korean_hint_mode: boolean;
+  group_name: string;
 };
 
 type Verb = {
@@ -230,7 +231,7 @@ export default function AdminDashboard() {
     const today = new Date().toISOString().split("T")[0];
 
     const [studentsRes, verbsRes, assignmentsRes, sessionsRes, usageRes, autoAssignRes] = await Promise.all([
-      supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed, korean_hint_mode").eq("role", "student"),
+      supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed, korean_hint_mode, group_name").eq("role", "student"),
       supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, anchor_short_1, anchor_long_1, is_active, verb_no, display_no").order("verb_no", { ascending: true }),
       supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, completed_count, last_completed_score, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
       supabase.from("speaking_sessions").select("duration_seconds"),
@@ -764,7 +765,7 @@ export default function AdminDashboard() {
               <ChevronDown className="h-5 w-5 text-muted-foreground" />
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-2 space-y-3">
-          {students.map((s) => {
+          {[...students].sort((a, b) => (a.display_name || a.student_id || "").localeCompare(b.display_name || b.student_id || "")).map((s) => {
             const studentAssignments = assignments.filter(a => a.student_id === s.id);
             const completed = studentAssignments.filter(a => a.status === "completed").length;
             const studentUsage = todayUsage.find(u => u.student_id === s.id);
@@ -885,9 +886,19 @@ export default function AdminDashboard() {
                 className="w-full h-12 rounded-xl border bg-background px-3 text-base"
               >
                 <option value="">All Students</option>
-                {students.map(s => (
-                  <option key={s.id} value={s.id}>{s.display_name || s.student_id}</option>
-                ))}
+                {(() => {
+                  const groups = [...new Set(students.map(s => s.group_name))].sort();
+                  return groups.map(g => (
+                    <optgroup key={g} label={g}>
+                      {students
+                        .filter(s => s.group_name === g)
+                        .sort((a, b) => (a.display_name || a.student_id || "").localeCompare(b.display_name || b.student_id || ""))
+                        .map(s => (
+                          <option key={s.id} value={s.id}>{s.display_name || s.student_id}</option>
+                        ))}
+                    </optgroup>
+                  ));
+                })()}
               </select>
               <div className="flex gap-2">
                 <Input
@@ -1056,53 +1067,83 @@ export default function AdminDashboard() {
           </Card>
 
           <h3 className="text-lg font-bold">📊 Tasks by Student</h3>
-          {students.map((s) => {
-            const studentAssigns = filteredAssignments.filter(a => a.student_id === s.id);
-            if (studentAssigns.length === 0) return null;
-            const completed = studentAssigns.filter(a => a.status === "completed").length;
-            const isExpanded = selectedStudentId === s.id;
+          {(() => {
+            const sortedStudents = [...students].sort((a, b) => (a.display_name || a.student_id || "").localeCompare(b.display_name || b.student_id || ""));
+            const groups = [...new Set(sortedStudents.map(s => s.group_name))].sort();
 
-            return (
-              <Collapsible key={s.id} open={isExpanded} onOpenChange={(open) => setSelectedStudentId(open ? s.id : "")}>
-                <Card className="rounded-2xl kid-shadow">
-                  <CollapsibleTrigger className="w-full text-left">
-                    <CardContent className="pt-4 pb-3 flex items-center justify-between cursor-pointer hover:bg-muted/50 rounded-2xl transition-colors">
-                      <div>
-                        <div className="font-bold text-base">{s.display_name ? `${s.display_name} (${s.student_id})` : `(${s.student_id})`}</div>
-                        <div className="text-xs text-muted-foreground">{completed}/{studentAssigns.length} completed</div>
+            return groups.map(groupName => {
+              const groupStudents = sortedStudents.filter(s => s.group_name === groupName);
+              const groupAssigns = filteredAssignments.filter(a => groupStudents.some(s => s.id === a.student_id));
+              if (groupAssigns.length === 0) return null;
+
+              return (
+                <Collapsible key={groupName} defaultOpen>
+                  <Card className="rounded-2xl kid-shadow">
+                    <CollapsibleTrigger className="w-full text-left">
+                      <CardContent className="pt-4 pb-3 flex items-center justify-between cursor-pointer hover:bg-muted/50 rounded-2xl transition-colors">
+                        <div className="font-bold text-base">📁 {groupName}</div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="rounded-full text-xs">{groupStudents.length} students</Badge>
+                          <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      </CardContent>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="px-4 pb-3 space-y-2">
+                        {groupStudents.map((s) => {
+                          const studentAssigns = filteredAssignments.filter(a => a.student_id === s.id);
+                          if (studentAssigns.length === 0) return null;
+                          const completed = studentAssigns.filter(a => a.status === "completed").length;
+                          const isExpanded = selectedStudentId === s.id;
+
+                          return (
+                            <Collapsible key={s.id} open={isExpanded} onOpenChange={(open) => setSelectedStudentId(open ? s.id : "")}>
+                              <div className="rounded-xl border">
+                                <CollapsibleTrigger className="w-full text-left">
+                                  <div className="px-3 py-2.5 flex items-center justify-between cursor-pointer hover:bg-muted/50 rounded-xl transition-colors">
+                                    <div>
+                                      <div className="font-bold text-sm">{s.display_name ? `${s.display_name} (${s.student_id})` : `(${s.student_id})`}</div>
+                                      <div className="text-xs text-muted-foreground">{completed}/{studentAssigns.length} completed</div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="outline" className="rounded-full text-xs">{studentAssigns.length} tasks</Badge>
+                                      <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                                    </div>
+                                  </div>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent>
+                                  <div className="px-3 pb-2.5 space-y-1.5">
+                                    {studentAssigns.map((a) => {
+                                      const verb = verbs.find(v => v.id === a.verb_id);
+                                      if (!verb) return null;
+                                      return (
+                                        <div key={a.id} className={`rounded-xl border p-2.5 ${!a.is_enabled ? "opacity-50 bg-muted/30" : "bg-background"}`}>
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <Badge variant="outline" className="rounded-full text-xs font-black px-1.5 py-0 shrink-0">#{verb.display_no ?? verb.verb_no}</Badge>
+                                            <span className="font-bold text-sm">{formatVerbKey(verb.verb_key, verb.meaning_en)}</span>
+                                            {a.status === "completed" && (
+                                              <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px] px-1.5 py-0">
+                                                <CheckCircle2 className="h-3 w-3 mr-0.5" /> Done
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <div className="text-sm text-muted-foreground mt-0.5">{verb.anchor_long_1 || verb.meaning_en || ""}</div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </CollapsibleContent>
+                              </div>
+                            </Collapsible>
+                          );
+                        })}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="rounded-full text-xs">{studentAssigns.length} tasks</Badge>
-                        <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-                      </div>
-                    </CardContent>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <div className="px-4 pb-3 space-y-1.5">
-                      {studentAssigns.map((a) => {
-                        const verb = verbs.find(v => v.id === a.verb_id);
-                        if (!verb) return null;
-                        return (
-                          <div key={a.id} className={`rounded-xl border p-2.5 ${!a.is_enabled ? "opacity-50 bg-muted/30" : "bg-background"}`}>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge variant="outline" className="rounded-full text-xs font-black px-1.5 py-0 shrink-0">#{verb.display_no ?? verb.verb_no}</Badge>
-                              <span className="font-bold text-sm">{formatVerbKey(verb.verb_key, verb.meaning_en)}</span>
-                              {a.status === "completed" && (
-                                <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px] px-1.5 py-0">
-                                  <CheckCircle2 className="h-3 w-3 mr-0.5" /> Done
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="text-sm text-muted-foreground mt-0.5">{verb.anchor_long_1 || verb.meaning_en || ""}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </CollapsibleContent>
-                </Card>
-              </Collapsible>
-            );
-          })}
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
+              );
+            });
+          })()}
         </TabsContent>
 
         {/* Verbs Tab */}
