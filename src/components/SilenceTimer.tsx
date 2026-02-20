@@ -6,7 +6,7 @@ type SilenceTimerProps = {
   onTimeout?: () => void;
 };
 
-export default function SilenceTimer({ active, durationMs = 3000, onTimeout }: SilenceTimerProps) {
+export default function SilenceTimer({ active, durationMs = 400, onTimeout }: SilenceTimerProps) {
   const [progress, setProgress] = useState(0);
   const rafRef = useRef<number>(0);
   const startRef = useRef(0);
