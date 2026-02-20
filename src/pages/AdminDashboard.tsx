@@ -75,6 +75,7 @@ export default function AdminDashboard() {
   const [newStudentQuota, setNewStudentQuota] = useState("60");
   const [newStudentDifficulty, setNewStudentDifficulty] = useState<"low" | "medium" | "high">("medium");
   const [newStudentSpeed, setNewStudentSpeed] = useState<"slow" | "medium" | "fast">("medium");
+  const [newStudentGroup, setNewStudentGroup] = useState("group0");
   const [creatingStudent, setCreatingStudent] = useState(false);
 
   // Edit student
@@ -85,7 +86,8 @@ export default function AdminDashboard() {
     daily_quota_minutes: string;
     difficulty_level: string;
     speech_speed: string;
-  }>({ display_name: "", pin: "", daily_quota_minutes: "", difficulty_level: "medium", speech_speed: "medium" });
+    group_name: string;
+  }>({ display_name: "", pin: "", daily_quota_minutes: "", difficulty_level: "medium", speech_speed: "medium", group_name: "group0" });
 
   // Cost per minute estimate (OpenAI Realtime API: ~$0.06 input + ~$0.24 output)
   const COST_PER_MINUTE = 0.30;
@@ -304,12 +306,13 @@ export default function AdminDashboard() {
             daily_quota_minutes: parseInt(newStudentQuota) || 60,
             difficulty_level: newStudentDifficulty,
             speech_speed: newStudentSpeed,
+            group_name: newStudentGroup || "group0",
           }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       toast.success("Student created! 🎉");
-      setNewStudentId(""); setNewStudentName(""); setNewStudentPin(""); setNewStudentQuota("60"); setNewStudentDifficulty("medium"); setNewStudentSpeed("medium");
+      setNewStudentId(""); setNewStudentName(""); setNewStudentPin(""); setNewStudentQuota("60"); setNewStudentDifficulty("medium"); setNewStudentSpeed("medium"); setNewStudentGroup("group0");
       loadData();
     } catch (e: any) {
       toast.error(e.message);
@@ -327,6 +330,7 @@ export default function AdminDashboard() {
       daily_quota_minutes: String(s.daily_quota_minutes),
       difficulty_level: s.difficulty_level,
       speech_speed: s.speech_speed,
+      group_name: s.group_name || "group0",
     });
   };
 
@@ -337,6 +341,7 @@ export default function AdminDashboard() {
     if (!isNaN(quota) && quota !== s.daily_quota_minutes) updates.daily_quota_minutes = quota;
     if (editForm.difficulty_level !== s.difficulty_level) updates.difficulty_level = editForm.difficulty_level;
     if (editForm.speech_speed !== s.speech_speed) updates.speech_speed = editForm.speech_speed;
+    if (editForm.group_name !== (s.group_name || "group0")) updates.group_name = editForm.group_name;
     
 
     if (Object.keys(updates).length > 0) {
@@ -723,6 +728,11 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold">Group</Label>
+                    <Input value={newStudentGroup} onChange={(e) => setNewStudentGroup(e.target.value)}
+                      placeholder="group0" className="h-12 rounded-xl text-base" />
+                  </div>
                   <Button onClick={createStudent} disabled={creatingStudent} className="w-full h-12 rounded-xl font-bold text-base">
                     {creatingStudent ? "Creating..." : "Create Student"}
                   </Button>
@@ -817,7 +827,10 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between pt-1">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold">Group</Label>
+                        <Input value={editForm.group_name} onChange={(e) => setEditForm(f => ({ ...f, group_name: e.target.value }))}
+                          placeholder="group0" className="h-10 rounded-xl text-sm" />
                       </div>
                       <Button onClick={() => saveEditStudent(s)} className="w-full h-10 rounded-xl font-bold text-sm gap-2">
                         <Save className="h-4 w-4" /> Save Changes
