@@ -618,6 +618,8 @@ export default function AdminDashboard() {
       toast.error(err.message || "Upload failed");
     }
     e.target.value = "";
+  };
+
   // KST date boundaries
   const getKSTDateBoundaries = () => {
     const now = new Date();
@@ -1413,7 +1415,7 @@ export default function AdminDashboard() {
               ].map(({ label, stats }) => (
                 <div key={label} className="border rounded-xl p-4 space-y-2">
                   <div className="text-center space-y-1">
-                    <div className="text-3xl font-black text-destructive">${stats.cost.toFixed(2)}</div>
+                    <div className="text-3xl font-black text-destructive">{"$"}{stats.cost.toFixed(2)}</div>
                     <div className="text-sm text-muted-foreground font-semibold">{label}</div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
