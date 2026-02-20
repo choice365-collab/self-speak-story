@@ -123,19 +123,19 @@ export default function VoiceChat() {
             </Button>
           ) : (
             <>
-              <Button
+              <button
                 onClick={toggleMute}
-                variant={userMuted ? "destructive" : "outline"}
                 className={cn(
-                  "h-16 w-16 rounded-2xl kid-shadow cursor-pointer",
+                  "inline-flex items-center justify-center h-16 w-16 rounded-2xl kid-shadow cursor-pointer border transition-colors",
+                  "disabled:pointer-events-none disabled:opacity-50",
                   userMuted
-                    ? "hover:!bg-destructive hover:!text-destructive-foreground active:!bg-destructive"
-                    : "hover:!bg-background hover:!text-foreground active:!bg-background"
+                    ? "bg-destructive text-destructive-foreground border-destructive"
+                    : "bg-background text-foreground border-input"
                 )}
                 disabled={!isConnected || isAiSpeaking}
               >
                 {userMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-              </Button>
+              </button>
               <Button
                 onClick={() => { disconnect(); }}
                 variant="destructive"
