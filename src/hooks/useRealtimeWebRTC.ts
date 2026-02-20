@@ -186,10 +186,9 @@ export function useRealtimeWebRTC() {
 
             // If AI is speaking, interrupt immediately
             if (convStateRef.current === "AI_SPEAKING") {
-              // Stop local audio playback
+              // Mute speaker (keep srcObject attached)
               if (audioRef.current) {
-                audioRef.current.pause();
-                audioRef.current.srcObject = null;
+                audioRef.current.muted = true;
               }
               // Cancel server response
               const d = dcRef.current;
@@ -222,11 +221,11 @@ export function useRealtimeWebRTC() {
             callbacksRef.current.onAiTranscriptDone?.(ev.transcript.trim());
           }
 
-          // ── AUDIO DELTA — re-attach stream if cleared by barge-in ──
+          // ── AUDIO DELTA — unmute speaker for new AI audio ──
           if (type === "response.audio.delta") {
-            if (audioRef.current && !audioRef.current.srcObject && remoteStreamRef.current) {
-              audioRef.current.srcObject = remoteStreamRef.current;
-              audioRef.current.play().catch(() => {});
+            if (audioRef.current) {
+              audioRef.current.muted = false;
+              if (audioRef.current.paused) audioRef.current.play().catch(() => {});
             }
             if (convStateRef.current !== "AI_SPEAKING") setConvState("AI_SPEAKING");
           }
