@@ -255,7 +255,7 @@ export default function AdminDashboard() {
 
   const totalUsedSecondsToday = todayUsage.reduce((sum, u) => sum + u.used_seconds, 0);
 
-  const toggleAssignmentEnabled = async (assignmentId: string, currentEnabled: boolean) => {
+  const _toggleAssignmentEnabled = async (assignmentId: string, currentEnabled: boolean) => {
     const { error } = await supabase
       .from("assignments")
       .update({ is_enabled: !currentEnabled })
@@ -1055,57 +1055,54 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
-          <h3 className="text-lg font-bold">📊 Tasks ({filteredAssignments.length})</h3>
-          {filteredAssignments.map((a) => (
-            <Card key={a.id} className={`rounded-2xl kid-shadow ${!a.is_enabled ? "opacity-50" : ""}`}>
-              <CardContent className="pt-4 pb-3 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="text-lg font-black text-primary shrink-0">#{a.task_no}</div>
-                  <div className="min-w-0">
-                    <div className="font-bold truncate">{a.profiles?.display_name || a.profiles?.student_id}</div>
-                    <div className="text-sm text-muted-foreground truncate">{a.verbs?.base_verb} - {a.verbs?.meaning_en}</div>
-                    {a.completed_at && (
-                      <div className="text-xs text-muted-foreground">Done: {new Date(a.completed_at).toLocaleDateString()}</div>
-                    )}
-                    {a.completed_count > 0 && (
-                      <div className="text-xs font-semibold text-secondary">
-                        Completed x{a.completed_count}{a.last_completed_score != null ? ` · Score: ${a.last_completed_score}` : ""}
+          <h3 className="text-lg font-bold">📊 Tasks by Student</h3>
+          {students.map((s) => {
+            const studentAssigns = filteredAssignments.filter(a => a.student_id === s.id);
+            if (studentAssigns.length === 0) return null;
+            const completed = studentAssigns.filter(a => a.status === "completed").length;
+            const isExpanded = selectedStudentId === s.id;
+
+            return (
+              <Collapsible key={s.id} open={isExpanded} onOpenChange={(open) => setSelectedStudentId(open ? s.id : "")}>
+                <Card className="rounded-2xl kid-shadow">
+                  <CollapsibleTrigger className="w-full text-left">
+                    <CardContent className="pt-4 pb-3 flex items-center justify-between cursor-pointer hover:bg-muted/50 rounded-2xl transition-colors">
+                      <div>
+                        <div className="font-bold text-base">{s.display_name ? `${s.display_name} (${s.student_id})` : `(${s.student_id})`}</div>
+                        <div className="text-xs text-muted-foreground">{completed}/{studentAssigns.length} completed</div>
                       </div>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <select
-                    value={a.status}
-                    onChange={async (ev) => {
-                      const newStatus = ev.target.value;
-                      const updates: any = { status: newStatus };
-                      if (newStatus === "completed") {
-                        updates.completed_at = new Date().toISOString();
-                      } else {
-                        updates.completed_at = null;
-                      }
-                      const { error } = await supabase.from("assignments").update(updates).eq("id", a.id);
-                      if (error) { toast.error(error.message); return; }
-                      setAssignments(prev => prev.map(x => x.id === a.id ? { ...x, ...updates } : x));
-                      toast.success(`Status → ${newStatus.replace("_", " ")}`);
-                    }}
-                    className="h-7 rounded-lg border bg-background px-1.5 text-xs font-semibold capitalize"
-                  >
-                    <option value="not_started">Not Started</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                  <button
-                    onClick={() => toggleAssignmentEnabled(a.id, a.is_enabled)}
-                    className={`w-10 h-6 rounded-full transition-colors ${a.is_enabled ? "bg-primary" : "bg-muted"}`}
-                  >
-                    <div className={`w-4 h-4 bg-background rounded-full transition-transform mx-1 ${a.is_enabled ? "translate-x-4" : ""}`} />
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="rounded-full text-xs">{studentAssigns.length} tasks</Badge>
+                        <ChevronDown className={`h-5 w-5 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                      </div>
+                    </CardContent>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="px-4 pb-3 space-y-1.5">
+                      {studentAssigns.map((a) => {
+                        const verb = verbs.find(v => v.id === a.verb_id);
+                        if (!verb) return null;
+                        return (
+                          <div key={a.id} className={`rounded-xl border p-2.5 ${!a.is_enabled ? "opacity-50 bg-muted/30" : "bg-background"}`}>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant="outline" className="rounded-full text-xs font-black px-1.5 py-0 shrink-0">#{verb.display_no ?? verb.verb_no}</Badge>
+                              <span className="font-bold text-sm">{formatVerbKey(verb.verb_key, verb.meaning_en)}</span>
+                              {a.status === "completed" && (
+                                <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px] px-1.5 py-0">
+                                  <CheckCircle2 className="h-3 w-3 mr-0.5" /> Done
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-0.5">{verb.anchor_long_1 || verb.meaning_en || ""}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+            );
+          })}
         </TabsContent>
 
         {/* Verbs Tab */}
