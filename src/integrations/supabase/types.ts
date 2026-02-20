@@ -245,6 +245,7 @@ export type Database = {
           daily_quota_minutes: number
           difficulty_level: Database["public"]["Enums"]["difficulty_level"]
           display_name: string | null
+          group_name: string
           id: string
           korean_hint_mode: boolean
           role: Database["public"]["Enums"]["app_role"]
@@ -257,6 +258,7 @@ export type Database = {
           daily_quota_minutes?: number
           difficulty_level?: Database["public"]["Enums"]["difficulty_level"]
           display_name?: string | null
+          group_name?: string
           id: string
           korean_hint_mode?: boolean
           role: Database["public"]["Enums"]["app_role"]
@@ -269,6 +271,7 @@ export type Database = {
           daily_quota_minutes?: number
           difficulty_level?: Database["public"]["Enums"]["difficulty_level"]
           display_name?: string | null
+          group_name?: string
           id?: string
           korean_hint_mode?: boolean
           role?: Database["public"]["Enums"]["app_role"]
