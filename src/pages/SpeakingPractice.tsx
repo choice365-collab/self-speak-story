@@ -111,7 +111,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     '2. Say the sentence naturally. Then IMMEDIATELY say its Korean meaning out loud. Format: "I have a cold — 감기에 걸렸어." This Korean translation is MANDATORY for every new sentence.',
     "3. Explain what it means in a simple, fun way (NO grammar terms).",
     "4. Create a quick, relatable situation where the student would use this sentence.",
-    "5. Prompt the student to try saying it (vary your phrasing each time).",
+    '5. Prompt the student to say it using IMPERATIVE/DECLARATIVE forms ONLY (e.g. "Say, \'He has a dog.\'", "Try this one.", "Now say it.", "Your turn."). NEVER use question forms like "Can you say...?" or "Could you try...?" — questions cause students to copy rising intonation.',
     "6. If correct → react with genuine enthusiasm (vary your reactions) and move on.",
     "7. If wrong → correct naturally within conversation, model the right sentence, and invite them to try again.",
     "After " + SHORT_ROUNDS + " short sentences, move to Phase 2.",
@@ -125,7 +125,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     '2. Say the sentence naturally. Then IMMEDIATELY say its Korean meaning out loud. Format: "I have a bad cold and need to rest — 감기가 심해서 쉬어야 해." This Korean translation is MANDATORY for every new sentence.',
     "3. Explain what it means simply.",
     "4. Create a situation where the student would use this longer sentence.",
-    "5. Prompt the student to try saying it (vary your phrasing each time).",
+    '5. Prompt the student to say it using IMPERATIVE/DECLARATIVE forms ONLY (e.g. "Say, \'I have a bad cold.\'", "Try this one.", "Now say it.", "Your turn."). NEVER use question forms like "Can you say...?" or "Could you try...?" — questions cause students to copy rising intonation.',
     "6. If correct → react with genuine enthusiasm (vary your reactions) and move on.",
     "7. If wrong → correct naturally within conversation, model the right sentence, and invite them to try again.",
     "After " + LONG_ROUNDS + " long sentences, move to Phase 3.",
@@ -155,7 +155,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "• Track your progress: announce when moving between phases (e.g., 'Great! Now let\\'s try some longer sentences!').",
     "• Vary your wording every turn. Never start two consecutive turns the same way.",
     "• Use diverse praise — never repeat the same one back-to-back.",
-    "• Rephrase your prompts creatively each time.",
+    "• Rephrase your prompts creatively each time — but ALWAYS use imperative/declarative forms, NEVER questions, when asking the student to speak.",
     "• Sound like a real person, not a script. Surprise the student with your energy and creativity.",
   ].filter(Boolean).join("\n");
 }
