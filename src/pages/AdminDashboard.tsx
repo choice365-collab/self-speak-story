@@ -1097,7 +1097,7 @@ export default function AdminDashboard() {
 
             return groups.map(groupName => {
               const groupStudents = sortedStudents.filter(s => s.group_name === groupName);
-              const groupAssigns = filteredAssignments.filter(a => groupStudents.some(s => s.id === a.student_id));
+              const groupAssigns = assignments.filter(a => groupStudents.some(s => s.id === a.student_id));
               if (groupAssigns.length === 0) return null;
 
               return (
@@ -1115,7 +1115,7 @@ export default function AdminDashboard() {
                     <CollapsibleContent>
                       <div className="px-4 pb-3 space-y-2">
                         {groupStudents.map((s) => {
-                          const studentAssigns = filteredAssignments.filter(a => a.student_id === s.id);
+                          const studentAssigns = assignments.filter(a => a.student_id === s.id);
                           if (studentAssigns.length === 0) return null;
                           const completed = studentAssigns.filter(a => a.status === "completed").length;
                           const isExpanded = selectedStudentId === s.id;
