@@ -64,7 +64,7 @@ const SHORT_ROUNDS = 2;
 const LONG_ROUNDS = 2;
 const SITUATION_ROUNDS = 2;
 
-function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string, koreanHintMode: boolean): string {
+function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
   const shortExamples = [verb.anchor_short_1, verb.anchor_short_2, verb.anchor_short_3].filter(Boolean);
   const longExamples = [verb.anchor_long_1, verb.anchor_long_2, verb.anchor_long_3].filter(Boolean);
   const situations = [verb.situation_seed_1, verb.situation_seed_2, verb.situation_seed_3, verb.situation_seed_4].filter(Boolean);
@@ -85,9 +85,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     fast: "You can use 3-4 sentences per turn. Speak naturally.",
   };
 
-  const koreanHintRule = koreanHintMode
-    ? '\nKOREAN HINTS: When you present a target sentence for the student to practice, add a Korean translation in parentheses right after. Example: "I got back home" (집에 돌아왔어). Only add hints for target practice sentences, not for your general speech.'
-    : "";
+  const koreanHintRule = '\nKOREAN TRANSLATION: The FIRST time you introduce each target sentence, say its Korean meaning once right after. Example: "I got back home — 집에 돌아왔어." Do NOT repeat the Korean for the same sentence again in later rounds. Only translate target practice sentences, not your general speech.';
 
   return [
     "You are an energetic, friendly native English teacher having a fun 1-on-1 conversation with a young student.",
@@ -305,7 +303,6 @@ export default function SpeakingPractice() {
       verbData,
       profile?.difficulty_level || "medium",
       profile?.speech_speed || "medium",
-      profile?.korean_hint_mode ?? false,
     );
 
     await connect({
