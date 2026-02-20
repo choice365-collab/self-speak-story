@@ -39,6 +39,8 @@ export function useRealtimeWebRTC() {
   const callbacksRef = useRef<ConnectOptions>({});
   const convStateRef = useRef<ConversationState>("IDLE");
   const remoteStreamRef = useRef<MediaStream | null>(null);
+  const bargeInTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastBargeInRef = useRef<number>(0);
 
   // ── Helpers ──
 
@@ -137,7 +139,7 @@ export function useRealtimeWebRTC() {
           body: JSON.stringify({
             voice: options.voice || "shimmer",
             instructions: options.instructions || "You are an energetic English teacher.",
-            turn_detection: options.turnDetection || { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 3000 },
+            turn_detection: options.turnDetection || { type: "server_vad", threshold: 0.75, prefix_padding_ms: 400, silence_duration_ms: 700 },
             input_audio_transcription: options.inputAudioTranscription || { model: "gpt-4o-mini-transcribe" },
             speed: options.speed || "medium",
           }),
@@ -180,32 +182,48 @@ export function useRealtimeWebRTC() {
           const ev = JSON.parse(e.data);
           const type = ev.type as string;
 
-          // ── STUDENT STARTS SPEAKING (barge-in) ──
+          // ── STUDENT STARTS SPEAKING (barge-in with 300ms delay + 800ms cooldown) ──
           if (type === "input_audio_buffer.speech_started") {
             console.log("[debug] speech_started");
 
-            // If AI is speaking, interrupt immediately
             if (convStateRef.current === "AI_SPEAKING") {
-              // Mute speaker (keep srcObject attached)
-              if (audioRef.current) {
-                audioRef.current.muted = true;
+              const now = Date.now();
+              // 800ms cooldown — ignore rapid repeated triggers
+              if (now - lastBargeInRef.current < 800) {
+                console.log("[debug] barge-in ignored (cooldown)");
+              } else {
+                // Wait 300ms — if speech_stopped arrives, it was noise
+                bargeInTimerRef.current = setTimeout(() => {
+                  console.log("[debug] barge-in confirmed after 300ms");
+                  lastBargeInRef.current = Date.now();
+                  // Mute speaker
+                  if (audioRef.current) audioRef.current.muted = true;
+                  // Cancel server response
+                  const d = dcRef.current;
+                  if (d && d.readyState === "open") {
+                    d.send(JSON.stringify({ type: "response.cancel" }));
+                    console.log("[debug] response.cancel sent");
+                  }
+                  setConvState("STUDENT_SPEAKING");
+                  setMicTrackEnabled(true);
+                }, 300);
               }
-              // Cancel server response
-              const d = dcRef.current;
-              if (d && d.readyState === "open") {
-                d.send(JSON.stringify({ type: "response.cancel" }));
-                console.log("[debug] response.cancel sent");
-              }
+            } else {
+              // Not during AI speech — switch immediately
+              setConvState("STUDENT_SPEAKING");
+              setMicTrackEnabled(true);
             }
-
-            setConvState("STUDENT_SPEAKING");
-            setMicTrackEnabled(true);
           }
 
           // ── STUDENT STOPS SPEAKING ──
-          // Server VAD fires this, then auto-creates a response
           if (type === "input_audio_buffer.speech_stopped") {
             console.log("[debug] speech_stopped");
+            // Cancel pending barge-in timer (was just noise)
+            if (bargeInTimerRef.current) {
+              clearTimeout(bargeInTimerRef.current);
+              bargeInTimerRef.current = null;
+              console.log("[debug] barge-in cancelled (noise)");
+            }
             setConvState("AI_SPEAKING");
             setMicTrackEnabled(false);
           }
@@ -275,6 +293,7 @@ export function useRealtimeWebRTC() {
   // ── Disconnect ──
 
   const disconnect = useCallback(() => {
+    if (bargeInTimerRef.current) { clearTimeout(bargeInTimerRef.current); bargeInTimerRef.current = null; }
     dcRef.current?.close();
     pcRef.current?.close();
     streamRef.current?.getTracks().forEach((t) => t.stop());
