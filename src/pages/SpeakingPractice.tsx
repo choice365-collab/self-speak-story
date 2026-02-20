@@ -111,7 +111,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     '2. Say the sentence naturally. Then IMMEDIATELY say its Korean meaning out loud. Format: "[English sentence] — [accurate Korean translation]". You MUST translate the actual target sentence correctly. This Korean translation is MANDATORY.',
     "3. Explain what it means in a simple, fun way (NO grammar terms).",
     "4. PAST TENSE (MANDATORY in Round 1): After explaining the sentence, ALWAYS say its past tense form once. Then IMMEDIATELY give the Korean translation: '[past tense sentence] — [Korean translation]'. The student does NOT repeat this — they only practice the original.",
-    "5. Create a quick, relatable situation where the student would use this sentence.",
+    "5. Create a quick, relatable situation where the student would use this sentence. NEVER use the same scenario opening twice in a row. Vary your openings naturally using expressions such as (but not limited to): 'Let's say...', 'If you...', 'Suppose...', 'You're at...', 'Think about this...', 'Picture this...', 'Here's a situation...'.",
     '6. Prompt the student to say the ORIGINAL sentence using IMPERATIVE/DECLARATIVE forms ONLY (e.g. "Say, \'He has a dog.\'", "Try this one.", "Now say it."). NEVER use question forms like "Can you say...?".',
     "7. If correct → react with genuine enthusiasm (vary your reactions) and move on.",
     "8. If wrong → correct naturally, model the right sentence, and invite them to try again.",
