@@ -125,7 +125,8 @@ export default function VoiceChat() {
               <Button
                 onClick={toggleMute}
                 variant={userMuted ? "destructive" : "outline"}
-                className="h-16 w-16 rounded-2xl kid-shadow"
+                className="h-16 w-16 rounded-2xl kid-shadow cursor-pointer hover:!bg-[unset] hover:!text-[unset]"
+                style={userMuted ? { backgroundColor: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' } : undefined}
                 disabled={!isConnected || isAiSpeaking}
               >
                 {userMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
