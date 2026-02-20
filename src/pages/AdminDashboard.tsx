@@ -8,13 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock, Search, CheckCircle2, XCircle, Pencil, X, Save, Trash2, AlertTriangle, ChevronDown } from "lucide-react";
+import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock, Search, CheckCircle2, XCircle, Pencil, X, Save, Trash2, AlertTriangle, ChevronDown, FileText } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import * as XLSX from "xlsx";
+import TranscriptReport from "@/components/TranscriptReport";
 
 type Student = {
   id: string;
@@ -116,6 +117,11 @@ export default function AdminDashboard() {
 
   // Auto-assign toggle
   const [autoAssign, setAutoAssign] = useState(true);
+
+  // Transcript report
+  const [reportAssignmentId, setReportAssignmentId] = useState<string | null>(null);
+  const [reportStudentName, setReportStudentName] = useState("");
+  const [reportTaskLabel, setReportTaskLabel] = useState("");
 
   // Student delete
   const [deleteStudentId, setDeleteStudentId] = useState<string | null>(null);
@@ -1222,9 +1228,24 @@ export default function AdminDashboard() {
                                             <Badge variant="outline" className="rounded-full text-xs font-black px-1.5 py-0 shrink-0">#{verb.display_no ?? verb.verb_no}</Badge>
                                             <span className="font-bold text-sm">{formatVerbKey(verb.verb_key, verb.meaning_en)}</span>
                                             {a.status === "completed" && (
-                                              <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px] px-1.5 py-0">
-                                                <CheckCircle2 className="h-3 w-3 mr-0.5" /> Done
-                                              </Badge>
+                                              <>
+                                                <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px] px-1.5 py-0">
+                                                  <CheckCircle2 className="h-3 w-3 mr-0.5" /> Done{a.completed_count > 1 ? ` x${a.completed_count}` : ""}
+                                                </Badge>
+                                                <Button
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  className="h-6 px-1.5 rounded-lg text-[10px]"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setReportAssignmentId(a.id);
+                                                    setReportStudentName(s.display_name ? `${s.display_name} (${s.student_id})` : s.student_id || "");
+                                                    setReportTaskLabel(`#${verb.display_no ?? verb.verb_no} ${formatVerbKey(verb.verb_key, verb.meaning_en)}`);
+                                                  }}
+                                                >
+                                                  <FileText className="h-3 w-3 mr-0.5" /> 📋
+                                                </Button>
+                                              </>
                                             )}
                                           </div>
                                           <div className="text-sm text-muted-foreground mt-0.5">{verb.anchor_long_1 || verb.meaning_en || ""}</div>
@@ -1613,6 +1634,15 @@ export default function AdminDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Transcript Report Dialog */}
+      <TranscriptReport
+        open={!!reportAssignmentId}
+        onOpenChange={(open) => { if (!open) setReportAssignmentId(null); }}
+        assignmentId={reportAssignmentId || ""}
+        studentName={reportStudentName}
+        taskLabel={reportTaskLabel}
+        showDownload
+      />
     </div>
   );
 }

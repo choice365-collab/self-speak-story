@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Clock, BookOpen, CheckCircle, Play, Mic } from "lucide-react";
+import { LogOut, Clock, BookOpen, CheckCircle, Play, Mic, FileText } from "lucide-react";
+import TranscriptReport from "@/components/TranscriptReport";
 
 type Assignment = {
   id: string;
@@ -31,6 +32,8 @@ export default function StudentDashboard() {
   const [goToTask, setGoToTask] = useState("");
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
+  const [reportAssignmentId, setReportAssignmentId] = useState<string | null>(null);
+  const [reportTaskLabel, setReportTaskLabel] = useState("");
 
   const remainingSeconds = Math.max(0, dailyLimitSeconds - dailyUsedSeconds);
   const remainingMinutes = Math.floor(remainingSeconds / 60);
@@ -203,7 +206,7 @@ export default function StudentDashboard() {
                       <div className="text-lg font-black text-primary">#{a.verbs?.display_no ?? a.task_no}</div>
                       <div>
                         <h3 className="text-xl font-bold">{a.verbs?.verb_key ? formatVerbKey(a.verbs.verb_key, a.verbs.meaning_en) : (a.verbs?.base_verb || "Unknown")}</h3>
-                        {a.completed_count > 0 && (
+                         {a.completed_count > 0 && (
                           <p className="text-xs font-semibold text-secondary">
                             Completed x{a.completed_count}
                             {a.last_completed_score != null ? ` · Last score: ${a.last_completed_score}` : ""}
@@ -211,10 +214,26 @@ export default function StudentDashboard() {
                         )}
                       </div>
                     </div>
-                    <Badge variant={config.variant} className="text-sm px-3 py-1 rounded-full">
-                      <StatusIcon className="h-3.5 w-3.5 mr-1" />
-                      {config.label}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      {a.status === "completed" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 px-2 rounded-xl text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReportAssignmentId(a.id);
+                            setReportTaskLabel(`#${a.verbs?.display_no ?? a.task_no} ${a.verbs?.verb_key ? formatVerbKey(a.verbs.verb_key, a.verbs.meaning_en) : ""}`);
+                          }}
+                        >
+                          <FileText className="h-3.5 w-3.5 mr-1" /> 📋
+                        </Button>
+                      )}
+                      <Badge variant={config.variant} className="text-sm px-3 py-1 rounded-full">
+                        <StatusIcon className="h-3.5 w-3.5 mr-1" />
+                        {config.label}
+                      </Badge>
+                    </div>
                   </div>
                   <Button
                     onClick={() => navigate(`/practice/${a.id}`)}
@@ -230,6 +249,15 @@ export default function StudentDashboard() {
           })()}
         </div>
       )}
+
+      {/* Transcript Report Dialog */}
+      <TranscriptReport
+        open={!!reportAssignmentId}
+        onOpenChange={(open) => { if (!open) setReportAssignmentId(null); }}
+        assignmentId={reportAssignmentId || ""}
+        studentName={profile?.display_name || ""}
+        taskLabel={reportTaskLabel}
+      />
     </div>
   );
 }
