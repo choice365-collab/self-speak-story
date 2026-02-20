@@ -139,7 +139,7 @@ export function useRealtimeWebRTC() {
           body: JSON.stringify({
             voice: options.voice || "shimmer",
             instructions: options.instructions || "You are an energetic English teacher.",
-            turn_detection: options.turnDetection || { type: "server_vad", threshold: 0.75, prefix_padding_ms: 400, silence_duration_ms: 700 },
+            turn_detection: options.turnDetection || { type: "server_vad", threshold: 0.75, prefix_padding_ms: 400, silence_duration_ms: 400 },
             input_audio_transcription: options.inputAudioTranscription || { model: "gpt-4o-mini-transcribe" },
             speed: options.speed || "medium",
           }),
