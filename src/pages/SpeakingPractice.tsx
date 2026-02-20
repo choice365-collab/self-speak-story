@@ -388,9 +388,9 @@ export default function SpeakingPractice() {
   // ── Render ──
 
   return (
-    <div className="min-h-screen bg-background flex flex-col max-w-2xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3 p-4 border-b">
+    <div className="h-screen bg-background flex flex-col max-w-2xl mx-auto overflow-hidden">
+      {/* Header — fixed top */}
+      <div className="flex-shrink-0 flex items-center gap-3 p-4 border-b">
         <Button variant="ghost" size="icon" onClick={() => { disconnect(); navigate("/"); }} className="rounded-xl">
           <ArrowLeft className="h-5 w-5" />
         </Button>
@@ -417,8 +417,8 @@ export default function SpeakingPractice() {
         </div>
       </div>
 
-      {/* Main area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Main area — scrollable middle */}
+      <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
         {/* Status orb */}
         {(isConnected || isConnecting) && (
           <div className="flex justify-center py-6">
@@ -501,7 +501,8 @@ export default function SpeakingPractice() {
       </div>
 
       {/* Controls */}
-      <div className="border-t p-4">
+      {/* Controls — fixed bottom */}
+      <div className="flex-shrink-0 border-t p-4">
         {isComplete ? (
           <Button onClick={() => navigate("/")} className="w-full h-16 text-xl font-bold rounded-2xl kid-shadow">🎉 Great Job! Go Back</Button>
         ) : connectionState === "idle" ? (
