@@ -363,7 +363,7 @@ export default function AdminDashboard() {
       daily_limit_min: s.daily_quota_minutes,
       difficulty: s.difficulty_level,
       speed: s.speech_speed,
-      korean_hints: s.korean_hint_mode ? "on" : "off",
+      
       is_active: true,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -402,7 +402,7 @@ export default function AdminDashboard() {
           if (row.daily_limit_min !== undefined) updates.daily_quota_minutes = parseInt(row.daily_limit_min) || 60;
           if (row.difficulty !== undefined && ["low", "medium", "high"].includes(row.difficulty)) updates.difficulty_level = row.difficulty;
           if (row.speed !== undefined && ["slow", "medium", "fast"].includes(row.speed)) updates.speech_speed = row.speed;
-          if (row.korean_hints !== undefined) updates.korean_hint_mode = String(row.korean_hints).toLowerCase() === "on" || row.korean_hints === true;
+          
           if (Object.keys(updates).length > 0) {
             await supabase.from("profiles").update(updates).eq("id", existing.id);
           }
@@ -437,7 +437,7 @@ export default function AdminDashboard() {
             const extraUpdates: any = {};
             if (row.difficulty && ["low", "medium", "high"].includes(row.difficulty)) extraUpdates.difficulty_level = row.difficulty;
             if (row.speed && ["slow", "medium", "fast"].includes(row.speed)) extraUpdates.speech_speed = row.speed;
-            if (row.korean_hints !== undefined) extraUpdates.korean_hint_mode = String(row.korean_hints).toLowerCase() === "on" || row.korean_hints === true;
+            
             if (Object.keys(extraUpdates).length > 0) {
               await supabase.from("profiles").update(extraUpdates).eq("id", data.user_id);
             }
@@ -712,7 +712,7 @@ export default function AdminDashboard() {
             <CardHeader><CardTitle className="text-lg">📤 Upload / Download Students</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Columns: student_id (required), display_name, pin (required for new), daily_limit_min, difficulty, speed, korean_hints (on/off), is_active
+                Columns: student_id (required), display_name, pin (required for new), daily_limit_min, difficulty, speed, is_active
               </p>
               <label className="block">
                 <div className="flex items-center justify-center w-full h-14 rounded-xl border-2 border-dashed border-primary/30 hover:border-primary cursor-pointer transition-colors">
