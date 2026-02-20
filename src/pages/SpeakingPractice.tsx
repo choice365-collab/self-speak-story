@@ -110,7 +110,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "1. Pick one short sentence from the list above.",
     '2. Say the sentence naturally. Then IMMEDIATELY say its Korean meaning out loud. Format: "[English sentence] — [accurate Korean translation]". You MUST translate the actual target sentence correctly. This Korean translation is MANDATORY.',
     "3. Explain what it means in a simple, fun way (NO grammar terms).",
-    "4. GRAMMAR VARIATIONS (MANDATORY in Round 1): Show how the sentence changes in three forms — past tense, progressive form, and question form. Say each variation out loud once naturally. For example, if the target is 'I have to go', say: 'I had to go… I am having to go… Do I have to go?' The student does NOT repeat these — they only practice the original.",
+    "4. GRAMMAR VARIATION (MANDATORY in Round 1): Pick ONE variation of the sentence — past tense, progressive form, or question form — whichever sounds most natural and useful for this particular sentence. Skip forms that sound awkward or unnatural. Rotate among the three forms across different sentences so the student hears variety over time. Say the variation once, then IMMEDIATELY give its Korean translation in the same format: '[variation] — [Korean translation]'. The student does NOT repeat this — they only practice the original.",
     "5. Create a quick, relatable situation where the student would use this sentence.",
     '6. Prompt the student to say the ORIGINAL sentence using IMPERATIVE/DECLARATIVE forms ONLY (e.g. "Say, \'He has a dog.\'", "Try this one.", "Now say it."). NEVER use question forms like "Can you say...?".',
     "7. If correct → react with genuine enthusiasm (vary your reactions) and move on.",
