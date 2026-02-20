@@ -136,7 +136,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "Situation seeds (expand these into vivid, detailed scenarios):",
     sitList,
     "",
-    "IMPORTANT FOR PHASE 3: Do NOT give the student the target sentence. Present only the situation and let them construct their own response.",
+    "QUESTION FORM RULE FOR PHASE 3: In Round 1, design the situation so the student naturally needs to ASK A QUESTION (e.g., asking for permission, requesting information, checking something). Do NOT reveal the target sentence — let the student construct the question on their own. In Round 2, use a normal statement-form situation.",
     "",
     "For each round:",
     "1. Pick a situation seed and expand it into a fun, detailed 2-3 sentence scenario.",
