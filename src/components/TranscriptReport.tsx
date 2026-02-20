@@ -13,6 +13,12 @@ type Session = {
   student_transcripts: string[] | null;
 };
 
+// Returns true if the text is primarily English (Latin alphabet)
+function isEnglish(text: string): boolean {
+  const cleaned = text.replace(/[^a-zA-Z\u00C0-\u024F\u1E00-\u1EFF\s]/g, "");
+  return cleaned.length >= text.replace(/\s/g, "").length * 0.5;
+}
+
 type TranscriptReportProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -54,7 +60,7 @@ export default function TranscriptReport({
     for (const s of sessions) {
       const date = new Date(s.created_at).toLocaleString();
       const duration = `${Math.floor(s.duration_seconds / 60)}m ${s.duration_seconds % 60}s`;
-      const transcripts = s.student_transcripts || [];
+      const transcripts = (s.student_transcripts || []).filter(isEnglish);
       if (transcripts.length === 0) {
         rows.push({ Student: studentName || "", Task: taskLabel || "", Date: date, Duration: duration, Transcript: "(no transcript)" });
       } else {
@@ -99,7 +105,7 @@ export default function TranscriptReport({
             {sessions.map((s, idx) => {
               const date = new Date(s.created_at).toLocaleString();
               const duration = `${Math.floor(s.duration_seconds / 60)}m ${s.duration_seconds % 60}s`;
-              const transcripts = s.student_transcripts || [];
+              const transcripts = (s.student_transcripts || []).filter(isEnglish);
               return (
                 <div key={s.id} className="rounded-xl border p-3 space-y-2">
                   <div className="flex items-center justify-between">
