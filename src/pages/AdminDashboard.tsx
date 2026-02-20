@@ -813,8 +813,8 @@ export default function AdminDashboard() {
                     <>
                       <div className="flex items-center justify-between mb-1">
                         <div>
-                          <div className="font-bold text-lg">{s.display_name}</div>
-                          <div className="text-sm text-muted-foreground">ID: {s.student_id} | {s.daily_quota_minutes} min/day</div>
+                          <div className="font-bold text-lg">{s.display_name ? `${s.display_name} (${s.student_id})` : `(${s.student_id})`}</div>
+                          <div className="text-sm text-muted-foreground">{s.daily_quota_minutes} min/day</div>
                            <div className="text-xs text-muted-foreground">
                              Difficulty: {s.difficulty_level} | Speed: {s.speech_speed}
                            </div>
