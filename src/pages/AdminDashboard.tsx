@@ -1331,9 +1331,6 @@ export default function AdminDashboard() {
                             )}
                           </div>
                           <span className={`text-sm ${!v.is_active ? "text-muted-foreground/60" : "text-muted-foreground"}`}>{v.anchor_long_1 || v.meaning_en}</span>
-                          {v.anchor_short_1 && (
-                            <span className={`text-xs ${!v.is_active ? "text-muted-foreground/40" : "text-muted-foreground/70"}`}>{v.anchor_short_1}</span>
-                          )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <Switch
