@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock, Search, CheckCircle2, XCircle, Pencil, X, Save, Trash2, AlertTriangle } from "lucide-react";
+import { LogOut, Users, BookOpen, Upload, Download, DollarSign, Clock, Search, CheckCircle2, XCircle, Pencil, X, Save, Trash2, AlertTriangle, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -659,75 +660,97 @@ export default function AdminDashboard() {
 
         {/* Students Tab */}
         <TabsContent value="students" className="space-y-4">
-          <Card className="rounded-2xl kid-shadow">
-            <CardHeader><CardTitle className="text-lg">➕ Add Student</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <Input value={newStudentId} onChange={(e) => setNewStudentId(e.target.value)}
-                placeholder="Student ID" className="h-12 rounded-xl text-base" />
-              <Input value={newStudentName} onChange={(e) => setNewStudentName(e.target.value)}
-                placeholder="Display Name (optional)" className="h-12 rounded-xl text-base" />
-              <Input type="tel" value={newStudentPin}
-                onChange={(e) => setNewStudentPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                placeholder="4-digit PIN" maxLength={4} className="h-12 rounded-xl text-base tracking-widest" />
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold">Daily Speaking Limit</Label>
-                <div className="relative">
-                  <Input type="number" value={newStudentQuota} onChange={(e) => setNewStudentQuota(e.target.value)}
-                    placeholder="60" className="h-12 rounded-xl text-base pr-20" />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">min/day</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-semibold">Difficulty</Label>
-                  <div className="flex rounded-xl border overflow-hidden">
-                    {([["L", "low"], ["M", "medium"], ["H", "high"]] as const).map(([label, value]) => (
-                      <button key={value} type="button"
-                        onClick={() => setNewStudentDifficulty(value)}
-                        className={`flex-1 h-10 text-sm font-bold transition-colors ${newStudentDifficulty === value ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
-                      >{label}</button>
-                    ))}
+          <Collapsible>
+            <Card className="rounded-2xl kid-shadow">
+              <CollapsibleTrigger className="w-full text-left">
+                <CardHeader className="flex flex-row items-center justify-between cursor-pointer hover:bg-muted/50 rounded-2xl transition-colors py-4">
+                  <CardTitle className="text-lg">➕ Add Student</CardTitle>
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="space-y-3 pt-0">
+                  <Input value={newStudentId} onChange={(e) => setNewStudentId(e.target.value)}
+                    placeholder="Student ID" className="h-12 rounded-xl text-base" />
+                  <Input value={newStudentName} onChange={(e) => setNewStudentName(e.target.value)}
+                    placeholder="Display Name (optional)" className="h-12 rounded-xl text-base" />
+                  <Input type="tel" value={newStudentPin}
+                    onChange={(e) => setNewStudentPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                    placeholder="4-digit PIN" maxLength={4} className="h-12 rounded-xl text-base tracking-widest" />
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold">Daily Speaking Limit</Label>
+                    <div className="relative">
+                      <Input type="number" value={newStudentQuota} onChange={(e) => setNewStudentQuota(e.target.value)}
+                        placeholder="60" className="h-12 rounded-xl text-base pr-20" />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">min/day</span>
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-semibold">Speed</Label>
-                  <div className="flex rounded-xl border overflow-hidden">
-                    {([["L", "slow"], ["M", "medium"], ["H", "fast"]] as const).map(([label, value]) => (
-                      <button key={value} type="button"
-                        onClick={() => setNewStudentSpeed(value)}
-                        className={`flex-1 h-10 text-sm font-bold transition-colors ${newStudentSpeed === value ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
-                      >{label}</button>
-                    ))}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-semibold">Difficulty</Label>
+                      <div className="flex rounded-xl border overflow-hidden">
+                        {([["L", "low"], ["M", "medium"], ["H", "high"]] as const).map(([label, value]) => (
+                          <button key={value} type="button"
+                            onClick={() => setNewStudentDifficulty(value)}
+                            className={`flex-1 h-10 text-sm font-bold transition-colors ${newStudentDifficulty === value ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                          >{label}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm font-semibold">Speed</Label>
+                      <div className="flex rounded-xl border overflow-hidden">
+                        {([["L", "slow"], ["M", "medium"], ["H", "fast"]] as const).map(([label, value]) => (
+                          <button key={value} type="button"
+                            onClick={() => setNewStudentSpeed(value)}
+                            className={`flex-1 h-10 text-sm font-bold transition-colors ${newStudentSpeed === value ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                          >{label}</button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              <Button onClick={createStudent} disabled={creatingStudent} className="w-full h-12 rounded-xl font-bold text-base">
-                {creatingStudent ? "Creating..." : "Create Student"}
-              </Button>
-            </CardContent>
-          </Card>
+                  <Button onClick={createStudent} disabled={creatingStudent} className="w-full h-12 rounded-xl font-bold text-base">
+                    {creatingStudent ? "Creating..." : "Create Student"}
+                  </Button>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
-          {/* Student Excel Import/Export */}
-          <Card className="rounded-2xl kid-shadow">
-            <CardHeader><CardTitle className="text-lg">📤 Upload / Download Students</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Columns: student_id (required), display_name, pin (required for new), daily_limit_min, difficulty, speed, is_active
-              </p>
-              <label className="block">
-                <div className="flex items-center justify-center w-full h-14 rounded-xl border-2 border-dashed border-primary/30 hover:border-primary cursor-pointer transition-colors">
-                  <Upload className="h-5 w-5 mr-2 text-primary" />
-                  <span className="font-bold text-primary">Upload Students (Excel)</span>
-                </div>
-                <input type="file" accept=".xlsx,.xls,.csv" onChange={handleStudentExcelUpload} className="hidden" />
-              </label>
-              <Button variant="outline" onClick={downloadStudents} className="w-full h-12 rounded-xl font-bold text-base">
-                <Download className="h-5 w-5 mr-2" /> Download Students (Excel)
-              </Button>
-            </CardContent>
-          </Card>
+          <Collapsible>
+            <Card className="rounded-2xl kid-shadow">
+              <CollapsibleTrigger className="w-full text-left">
+                <CardHeader className="flex flex-row items-center justify-between cursor-pointer hover:bg-muted/50 rounded-2xl transition-colors py-4">
+                  <CardTitle className="text-lg">📤 Upload / Download Students</CardTitle>
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="space-y-3 pt-0">
+                  <p className="text-xs text-muted-foreground">
+                    Columns: student_id (required), display_name, pin (required for new), daily_limit_min, difficulty, speed, is_active
+                  </p>
+                  <label className="block">
+                    <div className="flex items-center justify-center w-full h-14 rounded-xl border-2 border-dashed border-primary/30 hover:border-primary cursor-pointer transition-colors">
+                      <Upload className="h-5 w-5 mr-2 text-primary" />
+                      <span className="font-bold text-primary">Upload Students (Excel)</span>
+                    </div>
+                    <input type="file" accept=".xlsx,.xls,.csv" onChange={handleStudentExcelUpload} className="hidden" />
+                  </label>
+                  <Button variant="outline" onClick={downloadStudents} className="w-full h-12 rounded-xl font-bold text-base">
+                    <Download className="h-5 w-5 mr-2" /> Download Students (Excel)
+                  </Button>
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
-          <h3 className="text-lg font-bold">📋 Student List</h3>
+          <Collapsible>
+            <CollapsibleTrigger className="w-full flex items-center justify-between cursor-pointer hover:bg-muted/50 rounded-xl px-2 py-2 transition-colors">
+              <h3 className="text-lg font-bold">📋 Student List ({students.length})</h3>
+              <ChevronDown className="h-5 w-5 text-muted-foreground" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2 space-y-3">
           {students.map((s) => {
             const studentAssignments = assignments.filter(a => a.student_id === s.id);
             const completed = studentAssignments.filter(a => a.status === "completed").length;
@@ -819,6 +842,8 @@ export default function AdminDashboard() {
               </Card>
             );
           })}
+            </CollapsibleContent>
+          </Collapsible>
         </TabsContent>
 
         {/* Tasks Tab */}
