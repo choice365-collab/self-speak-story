@@ -419,28 +419,57 @@ export default function SpeakingPractice() {
         </div>
       </div>
 
-      {/* Main area — scrollable middle */}
-      <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
-        {/* Status orb */}
-        {(isConnected || isConnecting) && (
-          <div className="flex justify-center py-6">
-            <div className={"relative w-32 h-32 rounded-full flex items-center justify-center transition-all duration-500 " + (
-              isAiSpeaking ? "bg-accent/20 shadow-[0_0_40px_hsl(var(--accent)/0.3)]"
-                : isConnected ? "bg-secondary/20 shadow-[0_0_40px_hsl(var(--secondary)/0.3)]"
-                : "bg-primary/20 animate-pulse"
-            )}>
-              <span className="text-4xl">{isConnected ? (isAiSpeaking ? "🔊" : "🎤") : "⏳"}</span>
-              {isConnected && isAiSpeaking && <div className="absolute inset-0 rounded-full border-2 border-accent/40 animate-ping" />}
+      {/* Status orb — fixed between header and subtitles */}
+      {(isConnected || isConnecting) && (
+        <div className="flex-shrink-0 flex flex-col items-center py-4 border-b">
+          <div className={"relative w-28 h-28 rounded-full flex items-center justify-center transition-all duration-500 " + (
+            isAiSpeaking ? "bg-accent/20 shadow-[0_0_40px_hsl(var(--accent)/0.3)]"
+              : isConnected ? "bg-secondary/20 shadow-[0_0_40px_hsl(var(--secondary)/0.3)]"
+              : "bg-primary/20 animate-pulse"
+          )}>
+            <span className="text-4xl">{isConnected ? (isAiSpeaking ? "🔊" : "🎤") : "⏳"}</span>
+            {isConnected && isAiSpeaking && <div className="absolute inset-0 rounded-full border-2 border-accent/40 animate-ping" />}
+          </div>
+          {isConnected && (
+            <div className="mt-2 text-center">
+              <span className={"text-xs font-bold " + (isAiSpeaking ? "text-accent" : "text-secondary")}>
+                {isAiSpeaking ? "🔊 Teacher speaking…" : "🎤 Your turn — speak now!"}
+              </span>
             </div>
-            {isConnected && (
-              <div className="absolute mt-36 text-center">
-                <span className={"text-xs font-bold " + (isAiSpeaking ? "text-accent" : "text-secondary")}>
-                  {isAiSpeaking ? "🔊 Teacher speaking…" : "🎤 Your turn — speak now!"}
-                </span>
-              </div>
-            )}
+          )}
+          {isConnected && userMuted && (
+            <div className="text-center text-xs text-destructive font-semibold mt-1">🔇 Microphone muted</div>
+          )}
+        </div>
+      )}
+
+      {/* Main area — scrollable, reverse order (newest at bottom) */}
+      <div className="flex-1 overflow-y-auto min-h-0 p-4 flex flex-col-reverse gap-4">
+        <div ref={messagesEndRef} />
+
+        {/* Streaming subtitle — bottom-most */}
+        {showSubtitles && streamingText && (
+          <div className="flex justify-start">
+            <Card className="max-w-[85%] rounded-2xl kid-shadow border-accent/30">
+              <CardContent className="pt-3 pb-3 px-4">
+                <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
+                <p className="text-base whitespace-pre-wrap"><HighlightedText text={streamingText} /><span className="animate-pulse">▌</span></p>
+              </CardContent>
+            </Card>
           </div>
         )}
+
+        {/* AI Subtitles — reversed so newest appears at bottom */}
+        {showSubtitles && [...transcripts].filter((t) => t.role === "assistant").reverse().map((t, i) => (
+          <div key={i} className="flex justify-start">
+            <Card className="max-w-[85%] rounded-2xl kid-shadow">
+              <CardContent className="pt-3 pb-3 px-4">
+                <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
+                <p className="text-base whitespace-pre-wrap"><HighlightedText text={t.text} /></p>
+              </CardContent>
+            </Card>
+          </div>
+        ))}
 
         {/* Correction History */}
         {showCorrections && correctionHistory.length > 0 && (
@@ -460,6 +489,8 @@ export default function SpeakingPractice() {
           </Card>
         )}
 
+        {error && <div className="text-center text-destructive font-semibold">{error}</div>}
+
         {/* Idle state */}
         {connectionState === "idle" && !isComplete && (
           <div className="text-center py-12 space-y-3">
@@ -468,38 +499,6 @@ export default function SpeakingPractice() {
             <p className="text-muted-foreground">Tap "Start Talking" to begin a voice conversation with your AI teacher.</p>
           </div>
         )}
-
-        {error && <div className="text-center text-destructive font-semibold">{error}</div>}
-
-        {isConnected && userMuted && (
-          <div className="text-center text-sm text-destructive font-semibold">🔇 Microphone muted — tap mic button to unmute</div>
-        )}
-
-        {/* AI Subtitles — finalized */}
-        {showSubtitles && transcripts.filter((t) => t.role === "assistant").map((t, i) => (
-          <div key={i} className="flex justify-start">
-            <Card className="max-w-[85%] rounded-2xl kid-shadow">
-              <CardContent className="pt-3 pb-3 px-4">
-                <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
-                <p className="text-base whitespace-pre-wrap"><HighlightedText text={t.text} /></p>
-              </CardContent>
-            </Card>
-          </div>
-        ))}
-
-        {/* Streaming subtitle (current AI speech) */}
-        {showSubtitles && streamingText && (
-          <div className="flex justify-start">
-            <Card className="max-w-[85%] rounded-2xl kid-shadow border-accent/30">
-              <CardContent className="pt-3 pb-3 px-4">
-                <p className="text-sm font-semibold mb-1">🤖 Teacher</p>
-                <p className="text-base whitespace-pre-wrap"><HighlightedText text={streamingText} /><span className="animate-pulse">▌</span></p>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Controls */}
