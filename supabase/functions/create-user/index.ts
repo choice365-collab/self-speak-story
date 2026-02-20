@@ -97,7 +97,7 @@ serve(async (req) => {
       });
     }
 
-    const { role, login_id: rawId, pin, password, display_name, daily_quota_minutes, difficulty_level, speech_speed } = await req.json();
+    const { role, login_id: rawId, pin, password, display_name, daily_quota_minutes, difficulty_level, speech_speed, group_name } = await req.json();
     const login_id = (rawId || "").toLowerCase().trim();
 
     if (role === "student") {
@@ -125,6 +125,7 @@ serve(async (req) => {
         daily_quota_minutes: daily_quota_minutes || 60,
         difficulty_level: difficulty_level || "medium",
         speech_speed: speech_speed || "medium",
+        group_name: group_name || "group0",
       });
 
       await supabase.from("user_roles").insert({
