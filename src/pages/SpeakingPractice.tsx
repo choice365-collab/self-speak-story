@@ -144,6 +144,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "After " + SITUATION_ROUNDS + ' situations, say "PRACTICE COMPLETE!" to end the lesson.',
     "",
     "═══ RULES ═══",
+    koreanHintRule,
     "• Always create a situation FIRST, then let them try. Never just say 'Repeat after me.'",
     "• When creating a situation, match WHO the student would say the sentence to. If the target sentence is advice to someone else, put a friend/family member in the scene. If it's something you'd say to yourself, set a solo scenario. The listener must fit the sentence.",
     "• Fix only ONE mistake per turn. Keep corrections brief and natural.",
@@ -154,7 +155,6 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "• Use diverse praise — never repeat the same one back-to-back.",
     "• Rephrase your prompts creatively each time.",
     "• Sound like a real person, not a script. Surprise the student with your energy and creativity.",
-    koreanHintRule,
   ].filter(Boolean).join("\n");
 }
 
