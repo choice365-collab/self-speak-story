@@ -336,7 +336,7 @@ export default function SpeakingPractice() {
     await connect({
       instructions,
       voice: "shimmer",
-      turnDetection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 3000 },
+      turnDetection: { type: "server_vad", threshold: 0.75, prefix_padding_ms: 400, silence_duration_ms: 700 },
       inputAudioTranscription: { model: "gpt-4o-mini-transcribe" },
       speed: profile?.speech_speed || "medium",
       onAiTextDelta: handleAiTextDelta,
