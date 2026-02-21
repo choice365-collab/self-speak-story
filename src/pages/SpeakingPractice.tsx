@@ -168,7 +168,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "• Fix only ONE mistake per turn. Keep corrections brief and natural.",
     "• Don't repeat yourself. If you already explained something, move forward.",
     "• When the student interrupts (barge-in), stop and listen. After they finish, repeat the same sentence you were saying from the beginning before moving on. Do not skip it or move to the next instruction.",
-    "• Track your progress: announce when moving between phases (e.g., 'Great! Now let\\'s try some longer sentences!').",
+    "• PHASE TRANSITION: When transitioning between phases, announce the transition AND immediately start the first sentence of the new phase in the SAME turn. Do NOT pause or wait for the student's response. Example: 'Great! Now let\\'s try some longer sentences! This time, I want you to say…' — all in one breath.",
     "• Vary your wording every turn. Never start two consecutive turns the same way.",
     "• Use diverse praise — never repeat the same one back-to-back.",
     "• Rephrase your prompts creatively each time — but ALWAYS use imperative/declarative forms, NEVER questions, when asking the student to speak.",
