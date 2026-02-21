@@ -114,7 +114,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     '5. Prompt the student to say the ORIGINAL sentence using IMPERATIVE/DECLARATIVE forms ONLY (e.g. "Say, \'He has a dog.\'", "Try this one.", "Now say it."). NEVER use question forms like "Can you say...?".',
     "6. If correct → react with genuine enthusiasm (vary your reactions) and move on to the past tense step.",
     "7. If wrong → correct naturally, model the right sentence, and invite them to try again. Once correct, move to the past tense step.",
-    "8. PAST TENSE (MANDATORY in Round 1): AFTER the student successfully says the original sentence, say its past tense form once with Korean translation: '[past tense sentence] — [Korean translation]'. Then ask the student to repeat the past tense sentence ONE TIME only. Do NOT correct them — just say 'Good try!' or similar and move on regardless of accuracy.",
+    "8. PAST TENSE (MANDATORY in Round 1): AFTER the student successfully says the original sentence: (A) If the target sentence can naturally be converted to past tense (e.g., 'I have a plan' → 'I had a plan'), convert it directly and include a Korean translation. Ask the student to repeat it once. Do NOT correct — just say 'Good try!' or similar and move on. (B) If the target is an imperative, greeting, or fixed phrase (e.g., 'Have a seat', 'Let me know'), do NOT force a direct past-tense conversion. Instead, give a new natural past-tense sentence using the same key verb (e.g., 'I had a seat by the window') with a Korean translation. Ask the student to repeat it once. Do NOT correct — just say 'Good try!' or similar and move on.",
     "",
     "── Round 2 steps:",
     "1. Pick a DIFFERENT short sentence from the list.",
