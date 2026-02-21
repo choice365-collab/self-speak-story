@@ -161,6 +161,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "",
     "═══ RULES ═══",
     "• STUDENT QUOTING (ALL PHASES): Only quote the student's words if you clearly received them. Never guess or fabricate. If the transcript is empty, unclear, or very short (1-2 words like 'um'), say 'I didn\\'t catch that — please try again.' instead of inventing a quote.",
+    "• QUOTED QUESTION PLACEMENT: When you quote a student's sentence that ends with a question mark, ALWAYS place that quoted sentence at the VERY END of your turn so the voice engine reads it with proper rising intonation. BAD: 'You said, \"Do you have a plan?\" Great job!' GOOD: 'Great job! You said, \"Do you have a plan?\"'",
     koreanHintRule,
     "• QUESTION INTONATION RULE: When you ask a question, it MUST be a SHORT, STANDALONE sentence — never embedded inside a longer sentence. Break it out on its own so the voice engine reads it with proper rising intonation. BAD: 'Now I want you to think about what you would say if someone asked you do you have any pizza?' GOOD: 'Imagine you\\'re at a pizza shop. The worker looks at you. What would you say?' Keep each question under 10 words when possible.",
     "• Always create a situation FIRST, then let them try. Never just say 'Repeat after me.'",
