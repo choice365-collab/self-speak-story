@@ -297,10 +297,32 @@ export default function SpeakingPractice() {
 
   // ── Callbacks ──
 
+  // Use ref for handleCompletion to avoid stale closures in callbacks
+  const handleCompletionRef = useRef<() => void>(() => {});
+  const completionTriggeredRef = useRef(false);
+
+  // Update ref whenever handleCompletion changes (it captures user, assignmentId, etc.)
+  useEffect(() => {
+    handleCompletionRef.current = () => {
+      if (completionTriggeredRef.current) return; // prevent double-trigger
+      completionTriggeredRef.current = true;
+      handleCompletion();
+    };
+  });
+
+  const checkForCompletion = useCallback((text: string) => {
+    if (completionTriggeredRef.current) return;
+    if (text.toUpperCase().includes("PRACTICE COMPLETE")) {
+      handleCompletionRef.current();
+    }
+  }, []);
+
   const handleAiTextDelta = useCallback((delta: string) => {
     streamingTextRef.current += delta;
     setStreamingText(streamingTextRef.current);
-  }, []);
+    // Backup detection: check streaming text even before done event
+    checkForCompletion(streamingTextRef.current);
+  }, [checkForCompletion]);
 
   const handleAiTranscriptDone = useCallback((text: string) => {
     // Finalize: move streaming text into transcripts
@@ -318,8 +340,9 @@ export default function SpeakingPractice() {
     if (corrMatch && youSaid) {
       addCorrection({ timestamp: Date.now(), targetSentence: corrMatch[1].trim(), studentTranscript: youSaid[1].trim(), correctedSentence: corrMatch[1].trim(), feedbackLevel: "Try Again" });
     }
-    if (text.includes("PRACTICE COMPLETE")) handleCompletion();
-  }, [addCorrection]);
+    // Primary detection (case-insensitive)
+    checkForCompletion(text);
+  }, [addCorrection, checkForCompletion]);
 
   const handleUserTranscript = useCallback((text: string) => {
     totalAudioSecondsRef.current += 5;
@@ -344,6 +367,7 @@ export default function SpeakingPractice() {
     userTranscriptsRef.current = [];
     aiTranscriptsRef.current = [];
     conversationLogRef.current = [];
+    completionTriggeredRef.current = false;
 
     // ── Audio unlock BEFORE any async work ──
     // This runs synchronously inside the user gesture (button click),
