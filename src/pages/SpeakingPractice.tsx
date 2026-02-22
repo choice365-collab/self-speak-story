@@ -233,7 +233,10 @@ export default function SpeakingPractice() {
 
   useEffect(() => {
     loadAssignment();
-    return () => disconnect();
+    return () => {
+      disconnect();
+      if (autoExitTimerRef.current) clearTimeout(autoExitTimerRef.current);
+    };
   }, [assignmentId]);
 
   // ── Data helpers ──
@@ -307,7 +310,7 @@ export default function SpeakingPractice() {
     if (corrMatch && youSaid) {
       addCorrection({ timestamp: Date.now(), targetSentence: corrMatch[1].trim(), studentTranscript: youSaid[1].trim(), correctedSentence: corrMatch[1].trim(), feedbackLevel: "Try Again" });
     }
-    if (text.includes("PRACTICE COMPLETE")) handleCompletion(false);
+    if (text.includes("PRACTICE COMPLETE")) handleCompletion();
   }, [addCorrection]);
 
   const handleUserTranscript = useCallback((text: string) => {
@@ -384,6 +387,8 @@ export default function SpeakingPractice() {
     setMicEnabled(!next);
   }, [isAiSpeaking, userMuted, setMicEnabled]);
 
+  const autoExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleCompletion = async (autoDisconnect = true) => {
     setIsComplete(true);
     const totalSessionSeconds = Math.floor((Date.now() - sessionStartRef.current) / 1000);
@@ -401,9 +406,14 @@ export default function SpeakingPractice() {
         student_transcripts: userTranscriptsRef.current,
       } as any);
     }
-    if (autoDisconnect) {
-      setTimeout(() => disconnect(), 2000);
-    }
+
+    // Auto-exit after 60 seconds
+    autoExitTimerRef.current = setTimeout(() => {
+      disconnect();
+      navigate("/");
+    }, 60_000);
+
+    // Don't auto-disconnect immediately — let them keep talking for up to 1 min
   };
 
   // ── Early returns ──
@@ -549,7 +559,7 @@ export default function SpeakingPractice() {
       {/* Controls — fixed bottom */}
       <div className="flex-shrink-0 border-t p-4">
         {isComplete ? (
-          <Button onClick={() => { disconnect(); navigate("/"); }} className="w-full h-16 text-xl font-bold rounded-2xl kid-shadow">🎉 Great Job! Go Back</Button>
+          <Button onClick={() => { if (autoExitTimerRef.current) clearTimeout(autoExitTimerRef.current); disconnect(); navigate("/"); }} className="w-full h-16 text-xl font-bold rounded-2xl kid-shadow">🎉 Great Job! Go Back</Button>
         ) : connectionState === "idle" ? (
           <Button onClick={handleStart} className="w-full h-16 text-lg font-bold rounded-2xl kid-shadow gap-2">
             <Mic className="h-6 w-6" /> Start Talking 🎤
