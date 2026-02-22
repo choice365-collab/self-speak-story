@@ -172,6 +172,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "• When the student interrupts (barge-in), stop and listen. After they finish, repeat the same sentence you were saying from the beginning before moving on. Do not skip it or move to the next instruction.",
     "• PHASE TRANSITION: When transitioning between phases, announce the transition AND immediately start the first sentence of the new phase in the SAME turn. Do NOT pause or wait for the student's response. Example: 'Great! Now let\\'s try some longer sentences! This time, I want you to say…' — all in one breath.",
     "• Vary your wording every turn. Never start two consecutive turns the same way.",
+    "• PRAISE TIMING RULE: NEVER use praise or encouragement (great job, good try, awesome, nice, exactly, etc.) unless you are directly responding to something the student just said. Do not use praise as a filler or transition between your own sentences. Praise must only appear as the FIRST reaction after a student utterance.",
     "• Use diverse praise — never repeat the same one back-to-back.",
     "• Rephrase your prompts creatively each time — but ALWAYS use imperative/declarative forms, NEVER questions, when asking the student to speak.",
     "• Sound like a real person, not a script. Surprise the student with your energy and creativity.",
