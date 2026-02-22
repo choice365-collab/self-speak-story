@@ -446,10 +446,9 @@ export default function SpeakingPractice() {
 
     // Auto-show report after 20 seconds if user doesn't press Great Job
     autoExitTimerRef.current = setTimeout(() => {
+      disconnect();
       setShowReport(true);
     }, 20_000);
-
-    // Don't auto-disconnect immediately — let them keep talking for up to 1 min
   };
 
   // ── Early returns ──
@@ -595,7 +594,7 @@ export default function SpeakingPractice() {
       {/* Controls — fixed bottom */}
       <div className="flex-shrink-0 border-t p-4">
         {isComplete ? (
-          <Button onClick={() => { setShowReport(true); }} className="w-full h-16 text-xl font-bold rounded-2xl kid-shadow">🎉 Great Job! View Report</Button>
+          <Button onClick={() => { disconnect(); setShowReport(true); }} className="w-full h-16 text-xl font-bold rounded-2xl kid-shadow">🎉 Great Job! View Report</Button>
         ) : connectionState === "idle" ? (
           <Button onClick={handleStart} className="w-full h-16 text-lg font-bold rounded-2xl kid-shadow gap-2">
             <Mic className="h-6 w-6" /> Start Talking 🎤
