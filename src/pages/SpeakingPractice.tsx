@@ -73,9 +73,11 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
   const longList = longExamples.map((e, i) => "  " + (i + 1) + '. "' + e + '"').join("\n");
   const sitList = situations.map((s, i) => "  " + (i + 1) + ". " + s).join("\n");
 
+  const worldContext = "WORLD CONTEXT: Your student lives in a child's world. Use vocabulary and scenarios from: playing with friends, animals, pets, toys, food (snacks, lunch, dinner), family, school life, playground, singing, drawing, sleeping, running, jumping, hiding, hobbies, sports, travel, holidays. AVOID: work, meetings, business, driving, money, office, schedules, appointments, commuting, or any adult-life vocabulary.";
+
   const difficultyGuides: Record<string, string> = {
-    low: "Speak as if your student is a 4-year-old American child. Naturally adjust your vocabulary, sentence length, and grammar to what a 4-year-old would understand.",
-    medium: "Speak as if your student is a 7-year-old American child. Naturally adjust your vocabulary, sentence length, and grammar to what a 7-year-old would understand.",
+    low: "Speak as if your student is a 4-year-old American child. Naturally adjust your vocabulary, sentence length, and grammar to what a 4-year-old would understand. " + worldContext,
+    medium: "Speak as if your student is a 7-year-old American child. Naturally adjust your vocabulary, sentence length, and grammar to what a 7-year-old would understand. " + worldContext,
     high: "Speak as if your student is a 10-year-old American child. Naturally adjust your vocabulary, sentence length, and grammar to what a 10-year-old would understand.",
   };
 

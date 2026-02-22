@@ -15,9 +15,10 @@ serve(async (req) => {
 
     let systemPrompt = "";
 
+    const worldContext = "WORLD CONTEXT: Your student lives in a child's world. Use vocabulary and scenarios from: playing with friends, animals, pets, toys, food (snacks, lunch, dinner), family, school life, playground, singing, drawing, sleeping, running, jumping, hiding, hobbies, sports, travel, holidays. AVOID: work, meetings, business, driving, money, office, schedules, appointments, commuting, or any adult-life vocabulary.";
     const difficultyGuides: Record<string, string> = {
-      low: "Speak as if your student is a 4-year-old American child. Use very short, simple sentences with basic vocabulary a 4-year-old would understand.",
-      medium: "Speak as if your student is a 7-year-old American child. Use moderate grammar with common expressions a 7-year-old would understand.",
+      low: "Speak as if your student is a 4-year-old American child. Use very short, simple sentences with basic vocabulary a 4-year-old would understand. " + worldContext,
+      medium: "Speak as if your student is a 7-year-old American child. Use moderate grammar with common expressions a 7-year-old would understand. " + worldContext,
       high: "Speak as if your student is a 10-year-old American child. Use natural, varied grammar including some idioms and complex sentences a 10-year-old would understand.",
     };
     const speedGuides: Record<string, string> = {
