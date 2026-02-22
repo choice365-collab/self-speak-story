@@ -409,10 +409,9 @@ export default function SpeakingPractice() {
       } as any);
     }
 
-    // Auto-exit after 60 seconds
+    // Auto-show report after 60 seconds
     autoExitTimerRef.current = setTimeout(() => {
-      disconnect();
-      navigate("/");
+      setShowReport(true);
     }, 60_000);
 
     // Don't auto-disconnect immediately — let them keep talking for up to 1 min
