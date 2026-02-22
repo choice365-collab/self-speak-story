@@ -50,8 +50,9 @@ export function useRealtimeWebRTC() {
   const healAudio = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    // Layer ①: force unmute
+    // Layer ①: restore volume (use volume instead of muted to keep playback active on mobile)
     audio.muted = false;
+    audio.volume = 1;
     // Layer ②: re-attach srcObject if lost
     if (!audio.srcObject && remoteStreamRef.current) {
       console.log("[heal] re-attaching srcObject");
@@ -101,7 +102,7 @@ export function useRealtimeWebRTC() {
   }, [setMicTrackEnabled]);
 
   const setSpeakerMuted = useCallback((muted: boolean) => {
-    if (audioRef.current) audioRef.current.muted = muted;
+    if (audioRef.current) audioRef.current.volume = muted ? 0 : 1;
   }, []);
 
   // ── Send text (for initial prompt / Korean handling) ──
@@ -225,8 +226,8 @@ export function useRealtimeWebRTC() {
                 bargeInTimerRef.current = setTimeout(() => {
                   console.log("[debug] barge-in confirmed after 300ms");
                   lastBargeInRef.current = Date.now();
-                  // Mute speaker
-                  if (audioRef.current) audioRef.current.muted = true;
+                  // Silence speaker without stopping playback (muted breaks mobile resume)
+                  if (audioRef.current) audioRef.current.volume = 0;
                   // Cancel server response
                   const d = dcRef.current;
                   if (d && d.readyState === "open") {
@@ -263,7 +264,7 @@ export function useRealtimeWebRTC() {
             // Layer ① — defensive unmute on transcript delta too
             healAudio();
             // Layer ③ — count transcript deltas while audio is silent
-            if (audioRef.current?.paused || audioRef.current?.muted) {
+            if (audioRef.current?.paused || audioRef.current?.volume === 0) {
               silentDeltaCountRef.current++;
               if (silentDeltaCountRef.current >= 5 && !audioHealAttemptedRef.current) {
                 console.warn("[heal] 5 silent transcript deltas — attempting full audio reset");
