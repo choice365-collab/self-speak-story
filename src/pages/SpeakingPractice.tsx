@@ -365,7 +365,7 @@ export default function SpeakingPractice() {
 
     await connect({
       instructions,
-      voice: "shimmer",
+      voice: ["shimmer", "coral", "sage", "alloy", "ash", "echo", "verse", "ballad"][Math.floor(Math.random() * 8)],
       preUnlockedAudio: unlockAudio,
       turnDetection: { type: "server_vad", threshold: 0.75, prefix_padding_ms: 400, silence_duration_ms: 700 },
       inputAudioTranscription: { model: "gpt-4o-mini-transcribe" },
