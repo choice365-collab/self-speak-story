@@ -212,6 +212,7 @@ export default function SpeakingPractice() {
   const userMutedRef = useRef(false);
   const streamingTextRef = useRef("");
   const userTranscriptsRef = useRef<string[]>([]);
+  const aiTranscriptsRef = useRef<string[]>([]);
 
   // Hook
   const {
@@ -306,6 +307,9 @@ export default function SpeakingPractice() {
     setStreamingText("");
     streamingTextRef.current = "";
 
+    // Save AI transcript
+    aiTranscriptsRef.current.push(text);
+
     // Check for corrections
     const corrMatch = text.match(/CORRECTION:\s*(.+)/i);
     const youSaid = text.match(/You said:\s*(.+)/i);
@@ -335,6 +339,7 @@ export default function SpeakingPractice() {
     setStreamingText("");
     streamingTextRef.current = "";
     userTranscriptsRef.current = [];
+    aiTranscriptsRef.current = [];
 
     // ── Audio unlock BEFORE any async work ──
     // This runs synchronously inside the user gesture (button click),
@@ -406,6 +411,7 @@ export default function SpeakingPractice() {
         assignment_id: assignmentId,
         duration_seconds: totalSessionSeconds,
         student_transcripts: userTranscriptsRef.current,
+        ai_transcripts: aiTranscriptsRef.current,
       } as any);
     }
 

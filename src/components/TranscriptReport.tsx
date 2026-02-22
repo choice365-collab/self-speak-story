@@ -11,12 +11,19 @@ type Session = {
   created_at: string;
   duration_seconds: number;
   student_transcripts: string[] | null;
+  ai_transcripts: string[] | null;
 };
 
 // Returns true if the text is primarily English (Latin alphabet)
 function isEnglish(text: string): boolean {
   const cleaned = text.replace(/[^a-zA-Z\u00C0-\u024F\u1E00-\u1EFF\s]/g, "");
   return cleaned.length >= text.replace(/\s/g, "").length * 0.5;
+}
+
+/** Extract quoted target sentences from AI text */
+function extractTargetSentences(text: string): string[] {
+  const matches = text.match(/"([^"]+)"/g);
+  return matches ? matches.map(m => m.replace(/"/g, "")) : [];
 }
 
 type TranscriptReportProps = {
@@ -48,7 +55,7 @@ export default function TranscriptReport({
     setLoading(true);
     const { data } = await supabase
       .from("speaking_sessions")
-      .select("id, created_at, duration_seconds, student_transcripts")
+      .select("id, created_at, duration_seconds, student_transcripts, ai_transcripts")
       .eq("assignment_id", assignmentId)
       .order("created_at", { ascending: false });
     setSessions((data as Session[]) || []);
@@ -56,17 +63,20 @@ export default function TranscriptReport({
   };
 
   const downloadExcel = () => {
-    const rows: { Student: string; Task: string; Date: string; Duration: string; Transcript: string }[] = [];
+    const rows: { Student: string; Task: string; Date: string; Duration: string; Role: string; Transcript: string }[] = [];
     for (const s of sessions) {
       const date = new Date(s.created_at).toLocaleString();
       const duration = `${Math.floor(s.duration_seconds / 60)}m ${s.duration_seconds % 60}s`;
-      const transcripts = s.student_transcripts || [];
-      if (transcripts.length === 0) {
-        rows.push({ Student: studentName || "", Task: taskLabel || "", Date: date, Duration: duration, Transcript: "(no transcript)" });
-      } else {
-        for (const t of transcripts) {
-          rows.push({ Student: studentName || "", Task: taskLabel || "", Date: date, Duration: duration, Transcript: t });
-        }
+      const studentLines = (s.student_transcripts || []).filter(isEnglish);
+      const aiLines = s.ai_transcripts || [];
+      if (studentLines.length === 0 && aiLines.length === 0) {
+        rows.push({ Student: studentName || "", Task: taskLabel || "", Date: date, Duration: duration, Role: "", Transcript: "(no transcript)" });
+      }
+      for (const t of studentLines) {
+        rows.push({ Student: studentName || "", Task: taskLabel || "", Date: date, Duration: duration, Role: "Student", Transcript: t });
+      }
+      for (const t of aiLines) {
+        rows.push({ Student: studentName || "", Task: taskLabel || "", Date: date, Duration: duration, Role: "Teacher", Transcript: t });
       }
     }
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -105,7 +115,8 @@ export default function TranscriptReport({
             {sessions.map((s, idx) => {
               const date = new Date(s.created_at).toLocaleString();
               const duration = `${Math.floor(s.duration_seconds / 60)}m ${s.duration_seconds % 60}s`;
-              const transcripts = s.student_transcripts || [];
+              const studentLines = (s.student_transcripts || []).filter(isEnglish);
+              const aiLines = s.ai_transcripts || [];
               return (
                 <div key={s.id} className="rounded-xl border p-3 space-y-2">
                   <div className="flex items-center justify-between">
@@ -115,13 +126,29 @@ export default function TranscriptReport({
                       <Badge variant="outline" className="rounded-full text-[10px]">{duration}</Badge>
                     </div>
                   </div>
-                  {transcripts.length === 0 ? (
+                  {studentLines.length === 0 && aiLines.length === 0 ? (
                     <p className="text-sm text-muted-foreground italic">No transcripts recorded</p>
                   ) : (
                     <div className="space-y-1">
-                      {transcripts.map((t, i) => (
+                      {/* Teacher target sentences */}
+                      {aiLines.length > 0 && (
+                        <div className="space-y-1 mb-2">
+                          {aiLines.map((t, i) => {
+                            const targets = extractTargetSentences(t);
+                            if (targets.length === 0) return null;
+                            return targets.map((target, j) => (
+                              <div key={`ai-${i}-${j}`} className="text-sm bg-primary/10 rounded-lg px-3 py-1.5">
+                                <span className="text-primary font-bold mr-1">🤖 (teacher)</span>
+                                <span className="text-primary font-semibold">{target}</span>
+                              </div>
+                            ));
+                          })}
+                        </div>
+                      )}
+                      {/* Student transcripts */}
+                      {studentLines.map((t, i) => (
                         <div key={i} className="text-sm bg-muted/50 rounded-lg px-3 py-1.5">
-                          <span className="text-primary font-semibold mr-1">🗣️</span>
+                          <span className="font-semibold mr-1">🗣️</span>
                           {t}
                         </div>
                       ))}

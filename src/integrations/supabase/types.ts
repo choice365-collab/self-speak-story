@@ -282,6 +282,7 @@ export type Database = {
       }
       speaking_sessions: {
         Row: {
+          ai_transcripts: string[] | null
           assignment_id: string | null
           created_at: string
           duration_seconds: number
@@ -291,6 +292,7 @@ export type Database = {
           student_transcripts: string[] | null
         }
         Insert: {
+          ai_transcripts?: string[] | null
           assignment_id?: string | null
           created_at?: string
           duration_seconds?: number
@@ -300,6 +302,7 @@ export type Database = {
           student_transcripts?: string[] | null
         }
         Update: {
+          ai_transcripts?: string[] | null
           assignment_id?: string | null
           created_at?: string
           duration_seconds?: number
