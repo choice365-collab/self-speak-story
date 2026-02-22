@@ -12,6 +12,7 @@ export type TranscriptEntry = {
 type ConnectOptions = {
   instructions?: string;
   voice?: string;
+  preUnlockedAudio?: HTMLAudioElement;
   turnDetection?: Record<string, unknown>;
   inputAudioTranscription?: Record<string, unknown>;
   speed?: string;
@@ -110,18 +111,25 @@ export function useRealtimeWebRTC() {
     setError(null);
 
     try {
-      // 1. Audio unlock (Chrome policy)
+      // 1. Audio setup — reuse pre-unlocked element if provided
       if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
       if (audioCtxRef.current.state === "suspended") await audioCtxRef.current.resume();
 
-      const audio = document.createElement("audio");
-      audio.autoplay = true;
-      (audio as any).playsInline = true;
-      document.body.appendChild(audio);
-      // Unlock autoplay immediately on user gesture (before any await)
-      audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-      try { await audio.play(); } catch (err) { console.error("[audio-unlock] silent play failed:", err); }
-      audio.src = "";
+      let audio: HTMLAudioElement;
+      if (options.preUnlockedAudio) {
+        // Reuse the audio element that was already unlocked in user gesture context
+        audio = options.preUnlockedAudio;
+        console.log("[audio] reusing pre-unlocked audio element");
+      } else {
+        // Fallback: create new element (may fail on mobile)
+        audio = document.createElement("audio");
+        audio.autoplay = true;
+        (audio as any).playsInline = true;
+        document.body.appendChild(audio);
+        audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+        try { await audio.play(); } catch (err) { console.error("[audio-unlock] silent play failed:", err); }
+        audio.src = "";
+      }
       audioRef.current = audio;
 
       // 2. Mic with quality flags

@@ -331,6 +331,18 @@ export default function SpeakingPractice() {
     streamingTextRef.current = "";
     userTranscriptsRef.current = [];
 
+    // ── Audio unlock BEFORE any async work ──
+    // This runs synchronously inside the user gesture (button click),
+    // so mobile browsers will grant autoplay permission.
+    const unlockAudio = document.createElement("audio");
+    unlockAudio.autoplay = true;
+    (unlockAudio as any).playsInline = true;
+    document.body.appendChild(unlockAudio);
+    unlockAudio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+    try { await unlockAudio.play(); } catch (err) { console.warn("[handleStart] audio unlock failed:", err); }
+    unlockAudio.pause();
+    unlockAudio.src = "";
+
     const instructions = buildSystemInstructions(
       verbData,
       profile?.difficulty_level || "medium",
@@ -340,6 +352,7 @@ export default function SpeakingPractice() {
     await connect({
       instructions,
       voice: "shimmer",
+      preUnlockedAudio: unlockAudio,
       turnDetection: { type: "server_vad", threshold: 0.75, prefix_padding_ms: 400, silence_duration_ms: 700 },
       inputAudioTranscription: { model: "gpt-4o-mini-transcribe" },
       speed: profile?.speech_speed || "medium",
@@ -347,7 +360,6 @@ export default function SpeakingPractice() {
       onAiTranscriptDone: handleAiTranscriptDone,
       onUserTranscript: handleUserTranscript,
       onStateChange: (state) => {
-        // Clear streaming buffer on barge-in
         if (state === "STUDENT_SPEAKING") {
           streamingTextRef.current = "";
           setStreamingText("");
@@ -357,8 +369,6 @@ export default function SpeakingPractice() {
         }
       },
       onReady: (_send) => {
-        // Trigger AI's first response without sending user text.
-        // The system instructions guide what the AI says.
         _send("Start the lesson now.");
       },
     });
