@@ -46,10 +46,11 @@ serve(async (req) => {
 
     const englishOnlyRule = `ABSOLUTE LANGUAGE RULE: You must NEVER output any Korean text, characters, or translations. Every single word you produce must be English. You may internally understand Korean input from the student, but your response must be 100% English. Do not translate into Korean. Do not explain meanings in Korean. Do not acknowledge that the student spoke Korean. If the student uses Korean or mixes Korean, silently infer their intended meaning, reformulate it as a correct English sentence, and continue the lesson entirely in English. This rule overrides all other instructions and must never be violated.\n\n`;
     const bargeInRule = `BARGE-IN RULE: If your previous response was interrupted or cut short (barge-in), always repeat that same sentence fully from the beginning before moving on. Do not skip the content you were trying to deliver.\n\n`;
+    const silenceRule = `SILENCE vs ATTEMPT RULE: If you hear ANY English attempt from the student — even mumbled, partial, or unclear — treat it as a real attempt. You may fill in the rest naturally and respond as if they said it well. However, if you heard NOTHING meaningful (only background noise, breathing, coughing, or a brief random sound with no English words at all), do NOT pretend they spoke. Instead say something like "I didn't hear you — go ahead, try it!" or "Are you ready? Give it a try!" Never fabricate a quote from silence.\n\n`;
 
 
     if (action === "explain") {
-      systemPrompt = levelPreamble + englishOnlyRule + bargeInRule + toneRules + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone.
+      systemPrompt = levelPreamble + englishOnlyRule + bargeInRule + silenceRule + toneRules + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone.
 
 The student is learning the word: "${verb_data.verb}"
 
@@ -78,7 +79,7 @@ Keep it energetic and expressive. No definitions. No translations.`;
       ].filter(Boolean);
       const randomSituation = situations[Math.floor(Math.random() * situations.length)] || "Tell me about your day";
 
-      systemPrompt = levelPreamble + englishOnlyRule + bargeInRule + toneRules + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone.
+      systemPrompt = levelPreamble + englishOnlyRule + bargeInRule + silenceRule + toneRules + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone.
 
 The student is playing with the word: "${verb_data.verb}"
 Give them this situation: "${randomSituation}"
@@ -87,7 +88,7 @@ Ask them to say something using "${verb_data.verb}".
 Keep it short and fun. Be encouraging!`;
 
     } else if (action === "feedback") {
-      systemPrompt = levelPreamble + englishOnlyRule + bargeInRule + toneRules + `You are a friendly, native English-speaking conversation partner — not a language teacher.
+      systemPrompt = levelPreamble + englishOnlyRule + bargeInRule + silenceRule + toneRules + `You are a friendly, native English-speaking conversation partner — not a language teacher.
 
 The student is playing with the word: "${verb_data.verb}"
 
@@ -97,7 +98,7 @@ If it sounds great, react with genuine enthusiasm and move on.
 
 Keep it short (2-4 lines). Help with only one thing per turn. Always start from what the student actually said.`;
     } else {
-      systemPrompt = levelPreamble + englishOnlyRule + bargeInRule + toneRules + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone. Be encouraging and helpful.`;
+      systemPrompt = levelPreamble + englishOnlyRule + bargeInRule + silenceRule + toneRules + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone. Be encouraging and helpful.`;
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
