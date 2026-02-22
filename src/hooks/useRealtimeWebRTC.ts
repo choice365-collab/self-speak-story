@@ -42,13 +42,33 @@ export function useRealtimeWebRTC() {
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const bargeInTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastBargeInRef = useRef<number>(0);
+  const audioHealAttemptedRef = useRef(false);
+  const silentDeltaCountRef = useRef(0);
 
   // ── Helpers ──
+
+  const healAudio = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    // Layer ①: force unmute
+    audio.muted = false;
+    // Layer ②: re-attach srcObject if lost
+    if (!audio.srcObject && remoteStreamRef.current) {
+      console.log("[heal] re-attaching srcObject");
+      audio.srcObject = remoteStreamRef.current;
+    }
+    // Force play if paused
+    if (audio.paused) {
+      audio.play().catch((err) => console.error("[heal] play() rejected:", err));
+    }
+  }, []);
 
   const setConvState = useCallback((state: ConversationState) => {
     convStateRef.current = state;
     setConversationState(state);
     callbacksRef.current.onStateChange?.(state);
+    // Reset silent delta counter on any state change
+    silentDeltaCountRef.current = 0;
     console.log(`[state] → ${state}`);
   }, []);
 
@@ -240,6 +260,19 @@ export function useRealtimeWebRTC() {
           // ── STREAMING SUBTITLE DELTA ──
           if (type === "response.audio_transcript.delta" && ev.delta) {
             callbacksRef.current.onAiTextDelta?.(ev.delta);
+            // Layer ① — defensive unmute on transcript delta too
+            healAudio();
+            // Layer ③ — count transcript deltas while audio is silent
+            if (audioRef.current?.paused || audioRef.current?.muted) {
+              silentDeltaCountRef.current++;
+              if (silentDeltaCountRef.current >= 5 && !audioHealAttemptedRef.current) {
+                console.warn("[heal] 5 silent transcript deltas — attempting full audio reset");
+                audioHealAttemptedRef.current = true;
+                healAudio();
+              }
+            } else {
+              silentDeltaCountRef.current = 0;
+            }
           }
 
           // ── FULL TRANSCRIPT DONE ──
@@ -250,16 +283,16 @@ export function useRealtimeWebRTC() {
 
           // ── AUDIO DELTA — unmute speaker for new AI audio ──
           if (type === "response.audio.delta") {
-            if (audioRef.current) {
-              audioRef.current.muted = false;
-              if (audioRef.current.paused) audioRef.current.play().catch((err) => console.error("[audio.delta] play() rejected:", err));
-            }
+            healAudio();
+            silentDeltaCountRef.current = 0; // audio is flowing, reset counter
             if (convStateRef.current !== "AI_SPEAKING") setConvState("AI_SPEAKING");
           }
 
           // ── RESPONSE DONE — open mic for next turn ──
           if (type === "response.done") {
             console.log("[debug] response.done");
+            audioHealAttemptedRef.current = false; // reset for next response
+            silentDeltaCountRef.current = 0;
             setConvState("IDLE");
             setMicTrackEnabled(true);
           }
@@ -269,7 +302,7 @@ export function useRealtimeWebRTC() {
             console.log("[debug] transcript.completed:", ev.transcript.trim());
             callbacksRef.current.onUserTranscript?.(ev.transcript.trim());
           }
-        } catch {}
+        } catch (parseErr) { /* ignore malformed events */ }
       };
 
       // 6. SDP exchange
