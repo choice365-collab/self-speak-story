@@ -110,22 +110,21 @@ export function useRealtimeWebRTC() {
     setError(null);
 
     try {
-      // 1. Audio unlock — MUST happen synchronously on user gesture, before any await
+      // 1. Audio unlock (Chrome policy)
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      if (audioCtxRef.current.state === "suspended") await audioCtxRef.current.resume();
+
       const audio = document.createElement("audio");
       audio.autoplay = true;
       (audio as any).playsInline = true;
       document.body.appendChild(audio);
+      // Unlock autoplay immediately on user gesture (before any await)
       audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-      const unlockPromise = audio.play().catch((err) => console.error("[audio-unlock] silent play failed:", err));
+      try { await audio.play(); } catch (err) { console.error("[audio-unlock] silent play failed:", err); }
+      audio.src = "";
       audioRef.current = audio;
 
-      // 2. AudioContext resume (can await now — gesture already captured above)
-      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-      if (audioCtxRef.current.state === "suspended") await audioCtxRef.current.resume();
-      await unlockPromise;
-      audio.src = "";
-
-      // 3. Mic with quality flags
+      // 2. Mic with quality flags
       const stream = await ensureMic();
       stream.getAudioTracks().forEach((t) => { t.enabled = false; }); // Start muted
 
