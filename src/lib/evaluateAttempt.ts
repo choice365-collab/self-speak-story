@@ -25,7 +25,7 @@ function contentTokens(tokens: string[]): string[] {
 export type FeedbackLevel = "Great!" | "Not Bad" | "Try Again";
 
 export type ErrorCategory =
-  | "tense"
+  | "time_form"
   | "word_order"
   | "missing_word"
   | "verb_form"

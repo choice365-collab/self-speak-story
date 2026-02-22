@@ -32,8 +32,8 @@ serve(async (req) => {
 `;
     const difficultyGuides: Record<string, string> = {
       low: "Speak as if your student is a 4-year-old American child. Use very short, simple sentences with basic vocabulary a 4-year-old would understand. " + worldContext,
-      medium: "Speak as if your student is a 7-year-old American child. Use moderate grammar with common expressions a 7-year-old would understand. " + worldContext,
-      high: "Speak as if your student is a 10-year-old American child. Use natural, varied grammar including some idioms and complex sentences a 10-year-old would understand.",
+      medium: "Speak as if your student is a 7-year-old American child. Use everyday expressions and natural sentence patterns a 7-year-old would understand. " + worldContext,
+      high: "Speak as if your student is a 10-year-old American child. Use natural, varied expressions including some idioms and complex sentences a 10-year-old would understand.",
     };
     const speedGuides: Record<string, string> = {
       slow: "Keep responses SHORT (1-2 sentences). Use simple words.",
@@ -87,7 +87,7 @@ Ask them to say something using "${verb_data.verb}".
 Keep it short and fun. Be encouraging!`;
 
     } else if (action === "feedback") {
-      systemPrompt = levelPreamble + englishOnlyRule + bargeInRule + toneRules + `You are a friendly, native English-speaking conversation partner — not a grammar checker.
+      systemPrompt = levelPreamble + englishOnlyRule + bargeInRule + toneRules + `You are a friendly, native English-speaking conversation partner — not a language teacher.
 
 The student is playing with the word: "${verb_data.verb}"
 
