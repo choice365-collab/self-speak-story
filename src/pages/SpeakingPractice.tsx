@@ -409,10 +409,10 @@ export default function SpeakingPractice() {
       } as any);
     }
 
-    // Auto-show report after 60 seconds
+    // Auto-show report after 20 seconds if user doesn't press Great Job
     autoExitTimerRef.current = setTimeout(() => {
       setShowReport(true);
-    }, 60_000);
+    }, 20_000);
 
     // Don't auto-disconnect immediately — let them keep talking for up to 1 min
   };
