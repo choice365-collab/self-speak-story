@@ -1,0 +1,1 @@
+ALTER TABLE public.speaking_sessions ADD COLUMN conversation_log jsonb[] DEFAULT '{}';

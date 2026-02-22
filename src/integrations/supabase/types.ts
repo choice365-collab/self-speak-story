@@ -284,6 +284,7 @@ export type Database = {
         Row: {
           ai_transcripts: string[] | null
           assignment_id: string | null
+          conversation_log: Json[] | null
           created_at: string
           duration_seconds: number
           id: string
@@ -294,6 +295,7 @@ export type Database = {
         Insert: {
           ai_transcripts?: string[] | null
           assignment_id?: string | null
+          conversation_log?: Json[] | null
           created_at?: string
           duration_seconds?: number
           id?: string
@@ -304,6 +306,7 @@ export type Database = {
         Update: {
           ai_transcripts?: string[] | null
           assignment_id?: string | null
+          conversation_log?: Json[] | null
           created_at?: string
           duration_seconds?: number
           id?: string

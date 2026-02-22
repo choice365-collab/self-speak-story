@@ -213,6 +213,7 @@ export default function SpeakingPractice() {
   const streamingTextRef = useRef("");
   const userTranscriptsRef = useRef<string[]>([]);
   const aiTranscriptsRef = useRef<string[]>([]);
+  const conversationLogRef = useRef<{ role: string; text: string; ts: number }[]>([]);
 
   // Hook
   const {
@@ -309,6 +310,7 @@ export default function SpeakingPractice() {
 
     // Save AI transcript
     aiTranscriptsRef.current.push(text);
+    conversationLogRef.current.push({ role: "teacher", text, ts: Date.now() });
 
     // Check for corrections
     const corrMatch = text.match(/CORRECTION:\s*(.+)/i);
@@ -323,6 +325,7 @@ export default function SpeakingPractice() {
     totalAudioSecondsRef.current += 5;
     if (text.trim()) {
       userTranscriptsRef.current.push(text.trim());
+      conversationLogRef.current.push({ role: "student", text: text.trim(), ts: Date.now() });
     }
     if (containsKorean(text)) {
       sendUserText('The student said something in Korean: "' + text + '". Infer what they meant. Respond ONLY in English.');
@@ -340,6 +343,7 @@ export default function SpeakingPractice() {
     streamingTextRef.current = "";
     userTranscriptsRef.current = [];
     aiTranscriptsRef.current = [];
+    conversationLogRef.current = [];
 
     // ── Audio unlock BEFORE any async work ──
     // This runs synchronously inside the user gesture (button click),
@@ -412,6 +416,7 @@ export default function SpeakingPractice() {
         duration_seconds: totalSessionSeconds,
         student_transcripts: userTranscriptsRef.current,
         ai_transcripts: aiTranscriptsRef.current,
+        conversation_log: conversationLogRef.current,
       } as any);
     }
 
