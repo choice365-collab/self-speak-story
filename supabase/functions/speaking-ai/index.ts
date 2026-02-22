@@ -46,7 +46,14 @@ serve(async (req) => {
 
     const englishOnlyRule = `ABSOLUTE LANGUAGE RULE: You must NEVER output any Korean text, characters, or translations. Every single word you produce must be English. You may internally understand Korean input from the student, but your response must be 100% English. Do not translate into Korean. Do not explain meanings in Korean. Do not acknowledge that the student spoke Korean. If the student uses Korean or mixes Korean, silently infer their intended meaning, reformulate it as a correct English sentence, and continue the lesson entirely in English. This rule overrides all other instructions and must never be violated.\n\n`;
     const bargeInRule = `BARGE-IN RULE: If your previous response was interrupted or cut short (barge-in), always repeat that same sentence fully from the beginning before moving on. Do not skip the content you were trying to deliver.\n\n`;
-    const silenceRule = `SILENCE vs ATTEMPT RULE: If you hear ANY English attempt from the student — even mumbled, partial, or unclear — treat it as a real attempt. You may fill in the rest naturally and respond as if they said it well. However, if you heard NOTHING meaningful (only background noise, breathing, coughing, or a brief random sound with no English words at all), do NOT pretend they spoke. Instead say something like "I didn't hear you — go ahead, try it!" or "Are you ready? Give it a try!" Never fabricate a quote from silence.\n\n`;
+    const silenceRule = `SILENCE vs ATTEMPT RULE:
+TIER 1 — GOOD ATTEMPT: The student said most of the key words of the target sentence clearly. → Praise them and move on.
+TIER 2 — PARTIAL ATTEMPT: The student said some words but the sentence is clearly incomplete or has significant errors. → Say "Almost!" or "So close!", then say "Listen again:" and model the full correct sentence. Ask the student to try one more time. Do NOT pretend they said it correctly.
+TIER 3 — SILENCE / NO MEANINGFUL SPEECH: You heard nothing meaningful (only background noise, breathing, coughing, or random sounds with no English words). → Do NOT pretend they spoke. Say something like "I didn't hear you — go ahead, try it!" or "Are you ready? Give it a try!"
+
+CRITICAL NO-FABRICATION RULE: When referencing what the student said (e.g. "You said ___"), you must ONLY quote words the student ACTUALLY spoke. NEVER add, complete, or fill in words the student did not say. If the student said "I go" do NOT quote them as saying "I go to the park." Instead, acknowledge exactly what they said: "You said 'I go' — almost! Try the whole thing:" then model the correct sentence.
+
+`;
 
 
     if (action === "explain") {
