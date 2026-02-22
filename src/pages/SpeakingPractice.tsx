@@ -10,6 +10,7 @@ import { ArrowLeft, Mic, MicOff, PhoneOff, CheckCircle, History, Captions, Capti
 import { formatVerbKey } from "@/lib/formatVerbKey";
 import { type CorrectionEntry } from "@/lib/evaluateAttempt";
 import { useRealtimeWebRTC, type TranscriptEntry } from "@/hooks/useRealtimeWebRTC";
+import TranscriptReport from "@/components/TranscriptReport";
 
 // ── Types ──
 
@@ -196,7 +197,8 @@ export default function SpeakingPractice() {
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [userMuted, setUserMuted] = useState(false);
   const [showCorrections, setShowCorrections] = useState(false);
-  const [showSubtitles, setShowSubtitles] = useState(true);
+  const [showSubtitles, setShowSubtitles] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const [correctionHistory, setCorrectionHistory] = useState<CorrectionEntry[]>(() => {
     try {
       const stored = localStorage.getItem("corrections_" + assignmentId);
@@ -559,7 +561,7 @@ export default function SpeakingPractice() {
       {/* Controls — fixed bottom */}
       <div className="flex-shrink-0 border-t p-4">
         {isComplete ? (
-          <Button onClick={() => { if (autoExitTimerRef.current) clearTimeout(autoExitTimerRef.current); disconnect(); navigate("/"); }} className="w-full h-16 text-xl font-bold rounded-2xl kid-shadow">🎉 Great Job! Go Back</Button>
+          <Button onClick={() => { setShowReport(true); }} className="w-full h-16 text-xl font-bold rounded-2xl kid-shadow">🎉 Great Job! View Report</Button>
         ) : connectionState === "idle" ? (
           <Button onClick={handleStart} className="w-full h-16 text-lg font-bold rounded-2xl kid-shadow gap-2">
             <Mic className="h-6 w-6" /> Start Talking 🎤
@@ -575,6 +577,23 @@ export default function SpeakingPractice() {
           </div>
         )}
       </div>
+
+      {/* Auto-show transcript report on completion */}
+      {assignmentId && (
+        <TranscriptReport
+          open={showReport}
+          onOpenChange={(open) => {
+            setShowReport(open);
+            if (!open) {
+              if (autoExitTimerRef.current) clearTimeout(autoExitTimerRef.current);
+              disconnect();
+              navigate("/");
+            }
+          }}
+          assignmentId={assignmentId}
+          taskLabel={verbData?.verb_key ? formatVerbKey(verbData.verb_key, verbData.meaning_en) : verbData?.base_verb}
+        />
+      )}
     </div>
   );
 }

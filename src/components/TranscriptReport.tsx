@@ -60,7 +60,7 @@ export default function TranscriptReport({
     for (const s of sessions) {
       const date = new Date(s.created_at).toLocaleString();
       const duration = `${Math.floor(s.duration_seconds / 60)}m ${s.duration_seconds % 60}s`;
-      const transcripts = (s.student_transcripts || []).filter(isEnglish);
+      const transcripts = s.student_transcripts || [];
       if (transcripts.length === 0) {
         rows.push({ Student: studentName || "", Task: taskLabel || "", Date: date, Duration: duration, Transcript: "(no transcript)" });
       } else {
@@ -105,7 +105,7 @@ export default function TranscriptReport({
             {sessions.map((s, idx) => {
               const date = new Date(s.created_at).toLocaleString();
               const duration = `${Math.floor(s.duration_seconds / 60)}m ${s.duration_seconds % 60}s`;
-              const transcripts = (s.student_transcripts || []).filter(isEnglish);
+              const transcripts = s.student_transcripts || [];
               return (
                 <div key={s.id} className="rounded-xl border p-3 space-y-2">
                   <div className="flex items-center justify-between">
