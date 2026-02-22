@@ -118,8 +118,9 @@ export function useRealtimeWebRTC() {
       audio.autoplay = true;
       (audio as any).playsInline = true;
       document.body.appendChild(audio);
+      // Unlock autoplay immediately on user gesture (before any await)
       audio.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-      try { await audio.play(); } catch {}
+      try { await audio.play(); } catch (err) { console.error("[audio-unlock] silent play failed:", err); }
       audio.src = "";
       audioRef.current = audio;
 
@@ -163,7 +164,7 @@ export function useRealtimeWebRTC() {
         console.log("[debug] ontrack — remote audio attached");
         remoteStreamRef.current = e.streams[0];
         audio.srcObject = e.streams[0];
-        audio.play().catch((err) => console.error("[debug] audio play failed", err));
+        audio.play().catch((err) => console.error("[ontrack] audio.play() rejected:", err));
       };
 
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
@@ -243,7 +244,7 @@ export function useRealtimeWebRTC() {
           if (type === "response.audio.delta") {
             if (audioRef.current) {
               audioRef.current.muted = false;
-              if (audioRef.current.paused) audioRef.current.play().catch(() => {});
+              if (audioRef.current.paused) audioRef.current.play().catch((err) => console.error("[audio.delta] play() rejected:", err));
             }
             if (convStateRef.current !== "AI_SPEAKING") setConvState("AI_SPEAKING");
           }
