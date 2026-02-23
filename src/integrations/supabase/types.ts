@@ -289,6 +289,7 @@ export type Database = {
           duration_seconds: number
           id: string
           session_date: string
+          session_state: Json | null
           student_id: string
           student_transcripts: string[] | null
         }
@@ -300,6 +301,7 @@ export type Database = {
           duration_seconds?: number
           id?: string
           session_date?: string
+          session_state?: Json | null
           student_id: string
           student_transcripts?: string[] | null
         }
@@ -311,6 +313,7 @@ export type Database = {
           duration_seconds?: number
           id?: string
           session_date?: string
+          session_state?: Json | null
           student_id?: string
           student_transcripts?: string[] | null
         }

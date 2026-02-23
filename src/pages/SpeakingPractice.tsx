@@ -239,6 +239,8 @@ export default function SpeakingPractice() {
   const userTranscriptsRef = useRef<string[]>([]);
   const aiTranscriptsRef = useRef<string[]>([]);
   const conversationLogRef = useRef<{ role: string; text: string; ts: number }[]>([]);
+  const currentSessionIdRef = useRef<string | null>(null);
+  const previousConversationLogRef = useRef<{ role: string; text: string; ts: number }[]>([]);
 
   // Hook
   const {
@@ -380,6 +382,64 @@ export default function SpeakingPractice() {
     }
   }, [sendUserText]);
 
+  // ── Save session on stop (for resume later) ──
+  const savePartialSession = useCallback(async () => {
+    if (!user || !assignmentId) return;
+    const totalSessionSeconds = Math.floor((Date.now() - sessionStartRef.current) / 1000);
+    await updateDailyUsage(totalAudioSecondsRef.current);
+
+    if (currentSessionIdRef.current) {
+      // Update existing session
+      await supabase.from("speaking_sessions").update({
+        duration_seconds: totalSessionSeconds,
+        student_transcripts: userTranscriptsRef.current,
+        ai_transcripts: aiTranscriptsRef.current,
+        conversation_log: conversationLogRef.current,
+        session_state: { status: "paused" },
+      } as any).eq("id", currentSessionIdRef.current);
+    } else {
+      // Insert new partial session
+      const { data } = await supabase.from("speaking_sessions").insert({
+        student_id: user.id,
+        assignment_id: assignmentId,
+        duration_seconds: totalSessionSeconds,
+        student_transcripts: userTranscriptsRef.current,
+        ai_transcripts: aiTranscriptsRef.current,
+        conversation_log: conversationLogRef.current,
+        session_state: { status: "paused" },
+      } as any).select("id").single();
+      if (data) currentSessionIdRef.current = (data as any).id;
+    }
+  }, [user, assignmentId]);
+
+  // ── Load previous paused session for resume ──
+  const loadPreviousSession = useCallback(async (): Promise<string | null> => {
+    if (!user || !assignmentId) return null;
+    const { data } = await supabase
+      .from("speaking_sessions")
+      .select("id, conversation_log, session_state")
+      .eq("assignment_id", assignmentId)
+      .eq("student_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!data) return null;
+    const state = (data as any).session_state;
+    if (!state || state.status !== "paused") return null;
+
+    const log = (data as any).conversation_log as { role: string; text: string; ts: number }[] | null;
+    if (!log || log.length === 0) return null;
+
+    // Save previous log for merging in report
+    previousConversationLogRef.current = log;
+    currentSessionIdRef.current = data.id;
+
+    // Find last teacher utterance
+    const lastTeacher = [...log].reverse().find(e => e.role === "teacher");
+    return lastTeacher?.text || null;
+  }, [user, assignmentId]);
+
   // ── Actions ──
 
   const handleStart = useCallback(async () => {
@@ -394,9 +454,10 @@ export default function SpeakingPractice() {
     conversationLogRef.current = [];
     completionTriggeredRef.current = false;
 
+    // Check for previous paused session
+    const lastTeacherText = await loadPreviousSession();
+
     // ── Audio unlock BEFORE any async work ──
-    // This runs synchronously inside the user gesture (button click),
-    // so mobile browsers will grant autoplay permission.
     const unlockAudio = document.createElement("audio");
     unlockAudio.autoplay = true;
     (unlockAudio as any).playsInline = true;
@@ -412,8 +473,17 @@ export default function SpeakingPractice() {
       profile?.speech_speed || "medium",
     );
 
+    // Build resume context if we have a previous session
+    let resumeInstructions = instructions;
+    if (lastTeacherText && previousConversationLogRef.current.length > 0) {
+      // Get last few exchanges for context
+      const recentLog = previousConversationLogRef.current.slice(-6);
+      const contextSummary = recentLog.map(e => `${e.role === "teacher" ? "Teacher" : "Student"}: ${e.text}`).join("\n");
+      resumeInstructions = instructions + "\n\n═══ RESUME CONTEXT ═══\nThis is a RESUMED session. The student stopped the previous session mid-lesson. Here is what happened in the previous session (last few exchanges):\n" + contextSummary + "\n\nIMPORTANT: Start by briefly welcoming the student back, then repeat what you were last saying. Continue the lesson from exactly where you left off. Do NOT restart from Phase 1.";
+    }
+
     await connect({
-      instructions,
+      instructions: resumeInstructions,
       voice: ["shimmer", "coral", "sage", "alloy", "ash", "echo", "verse", "ballad"][Math.floor(Math.random() * 8)],
       preUnlockedAudio: unlockAudio,
       turnDetection: { type: "server_vad", threshold: 0.75, prefix_padding_ms: 400, silence_duration_ms: 700 },
@@ -432,12 +502,16 @@ export default function SpeakingPractice() {
         }
       },
       onReady: (_send) => {
-        _send("Start the lesson now.");
+        if (lastTeacherText) {
+          _send("Resume the lesson. Welcome the student back and continue from where we left off.");
+        } else {
+          _send("Start the lesson now.");
+        }
       },
     });
 
     sessionStartRef.current = Date.now();
-  }, [verbData, profile, connect, handleAiTextDelta, handleAiTranscriptDone, handleUserTranscript, setMicEnabled]);
+  }, [verbData, profile, connect, handleAiTextDelta, handleAiTranscriptDone, handleUserTranscript, setMicEnabled, loadPreviousSession]);
 
   const toggleMute = useCallback(() => {
     if (isAiSpeaking) return;
@@ -458,15 +532,35 @@ export default function SpeakingPractice() {
     const newCount = ((currentAssignment as any)?.completed_count || 0) + 1;
     await supabase.from("assignments").update({ status: "completed", completed_at: new Date().toISOString(), completed_count: newCount }).eq("id", assignmentId);
 
+    // Merge previous conversation log with current session's log
+    const mergedLog: { role: string; text: string; ts: number }[] = [];
+    if (previousConversationLogRef.current.length > 0) {
+      mergedLog.push(...previousConversationLogRef.current);
+      mergedLog.push({ role: "system", text: "--- Session Resumed ---", ts: Date.now() });
+    }
+    mergedLog.push(...conversationLogRef.current);
+
     if (user) {
-      await supabase.from("speaking_sessions").insert({
-        student_id: user.id,
-        assignment_id: assignmentId,
-        duration_seconds: totalSessionSeconds,
-        student_transcripts: userTranscriptsRef.current,
-        ai_transcripts: aiTranscriptsRef.current,
-        conversation_log: conversationLogRef.current,
-      } as any);
+      if (currentSessionIdRef.current) {
+        // Update existing paused session → mark as completed with merged log
+        await supabase.from("speaking_sessions").update({
+          duration_seconds: totalSessionSeconds,
+          student_transcripts: userTranscriptsRef.current,
+          ai_transcripts: aiTranscriptsRef.current,
+          conversation_log: mergedLog,
+          session_state: { status: "completed" },
+        } as any).eq("id", currentSessionIdRef.current);
+      } else {
+        await supabase.from("speaking_sessions").insert({
+          student_id: user.id,
+          assignment_id: assignmentId,
+          duration_seconds: totalSessionSeconds,
+          student_transcripts: userTranscriptsRef.current,
+          ai_transcripts: aiTranscriptsRef.current,
+          conversation_log: mergedLog,
+          session_state: { status: "completed" },
+        } as any);
+      }
     }
 
     // Auto-show report after 20 seconds if user doesn't press Great Job
@@ -507,7 +601,7 @@ export default function SpeakingPractice() {
     <div className="h-screen bg-background flex flex-col max-w-2xl mx-auto overflow-hidden">
       {/* Header — fixed top */}
       <div className="flex-shrink-0 flex items-center gap-3 p-4 border-b">
-        <Button variant="ghost" size="icon" onClick={() => { disconnect(); navigate("/"); }} className="rounded-xl">
+        <Button variant="ghost" size="icon" onClick={async () => { if (isConnected) await savePartialSession(); disconnect(); navigate("/"); }} className="rounded-xl">
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
@@ -629,7 +723,7 @@ export default function SpeakingPractice() {
             <Button onClick={toggleMute} variant={userMuted ? "destructive" : "outline"} className="h-16 w-16 rounded-2xl kid-shadow" disabled={!isConnected || isAiSpeaking}>
               {userMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
             </Button>
-            <Button onClick={() => { disconnect(); navigate("/"); }} variant="destructive" className="h-16 px-8 text-lg font-bold rounded-2xl kid-shadow gap-2">
+            <Button onClick={async () => { await savePartialSession(); disconnect(); navigate("/"); }} variant="destructive" className="h-16 px-8 text-lg font-bold rounded-2xl kid-shadow gap-2">
               <PhoneOff className="h-6 w-6" /> Stop
             </Button>
           </div>
