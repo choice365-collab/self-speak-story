@@ -64,7 +64,7 @@ export default function AdminDashboard() {
   const [students, setStudents] = useState<Student[]>([]);
   const [verbs, setVerbs] = useState<Verb[]>([]);
   const [assignments, setAssignments] = useState<AssignmentView[]>([]);
-  const [sessionData, setSessionData] = useState<{ session_date: string; duration_seconds: number }[]>([]);
+  const [sessionData, setSessionData] = useState<{ session_date: string; duration_seconds: number; student_id: string }[]>([]);
   const [todayUsage, setTodayUsage] = useState<DailyUsageRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -252,7 +252,7 @@ export default function AdminDashboard() {
       supabase.from("profiles").select("id, student_id, display_name, daily_quota_minutes, difficulty_level, speech_speed, korean_hint_mode, group_name").eq("role", "student"),
       supabase.from("verbs").select("id, verb_key, base_verb, meaning_en, anchor_short_1, anchor_long_1, is_active, verb_no, display_no").order("verb_no", { ascending: true }),
       supabase.from("assignments").select("id, status, task_no, is_enabled, student_id, verb_id, completed_at, completed_count, last_completed_score, profiles!assignments_student_id_profiles_fkey(student_id, display_name), verbs(base_verb, meaning_en)").order("task_no", { ascending: true }),
-      supabase.from("speaking_sessions").select("session_date, duration_seconds"),
+      supabase.from("speaking_sessions").select("session_date, duration_seconds, student_id"),
       supabase.from("daily_usage").select("student_id, used_seconds").eq("date", today),
       supabase.from("admin_settings").select("value").eq("key", "auto_assign_enabled").maybeSingle(),
     ]);
@@ -264,7 +264,7 @@ export default function AdminDashboard() {
     if (verbsRes.data) setVerbs(verbsRes.data as Verb[]);
     if (assignmentsRes.data) setAssignments(assignmentsRes.data as any);
     if (sessionsRes.data) {
-      setSessionData(sessionsRes.data as { session_date: string; duration_seconds: number }[]);
+      setSessionData(sessionsRes.data as { session_date: string; duration_seconds: number; student_id: string }[]);
     }
     if (usageRes.data) setTodayUsage(usageRes.data as DailyUsageRow[]);
     setLoading(false);
@@ -1625,6 +1625,79 @@ export default function AdminDashboard() {
                 <p>This is an approximation. Actual costs may vary.</p>
                 <p>Check <a href="https://platform.openai.com/usage" target="_blank" rel="noopener noreferrer" className="text-primary underline font-bold">OpenAI Dashboard</a> for exact billing.</p>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Student Breakdown */}
+          <Card className="rounded-2xl kid-shadow">
+            <CardHeader><CardTitle className="text-lg">👤 Student Breakdown</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {[
+                { label: "Recent 2 Days", startDate: twoDayStart },
+                { label: "This Week", startDate: weekStart },
+                { label: "This Month", startDate: monthStart },
+              ].map(({ label, startDate }) => {
+                const periodSessions = sessionData.filter(s => s.session_date >= startDate);
+                const byStudent = new Map<string, { seconds: number; count: number }>();
+                for (const s of periodSessions) {
+                  const prev = byStudent.get(s.student_id) || { seconds: 0, count: 0 };
+                  byStudent.set(s.student_id, { seconds: prev.seconds + (s.duration_seconds || 0), count: prev.count + 1 });
+                }
+                const rows = students.map(st => {
+                  const usage = byStudent.get(st.id) || { seconds: 0, count: 0 };
+                  return { name: st.display_name || st.student_id || "—", ...usage, cost: (usage.seconds / 60) * COST_PER_MINUTE };
+                }).filter(r => r.seconds > 0).sort((a, b) => b.seconds - a.seconds);
+                const totalSec = rows.reduce((s, r) => s + r.seconds, 0);
+                const totalCost = rows.reduce((s, r) => s + r.cost, 0);
+                const totalCount = rows.reduce((s, r) => s + r.count, 0);
+
+                return (
+                  <Collapsible key={label}>
+                    <CollapsibleTrigger className="flex items-center justify-between w-full border rounded-xl p-3 hover:bg-muted/50 transition-colors">
+                      <span className="font-bold text-sm">{label}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-black text-destructive">${totalCost.toFixed(2)}</span>
+                        <span className="text-xs text-muted-foreground">{rows.length} students</span>
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="pt-2">
+                      {rows.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-4">No usage data</p>
+                      ) : (
+                        <div className="border rounded-xl overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b bg-muted/30">
+                                <th className="text-left p-2 font-semibold">Student</th>
+                                <th className="text-right p-2 font-semibold">Min</th>
+                                <th className="text-right p-2 font-semibold">Sessions</th>
+                                <th className="text-right p-2 font-semibold">Cost</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rows.map((r, i) => (
+                                <tr key={i} className="border-b last:border-0">
+                                  <td className="p-2 font-medium">{r.name}</td>
+                                  <td className="p-2 text-right">{Math.floor(r.seconds / 60)}</td>
+                                  <td className="p-2 text-right">{r.count}</td>
+                                  <td className="p-2 text-right font-bold">${r.cost.toFixed(2)}</td>
+                                </tr>
+                              ))}
+                              <tr className="bg-muted/50 font-black">
+                                <td className="p-2">Total</td>
+                                <td className="p-2 text-right">{Math.floor(totalSec / 60)}</td>
+                                <td className="p-2 text-right">{totalCount}</td>
+                                <td className="p-2 text-right text-destructive">${totalCost.toFixed(2)}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              })}
             </CardContent>
           </Card>
         </TabsContent>
