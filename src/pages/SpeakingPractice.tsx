@@ -339,7 +339,15 @@ export default function SpeakingPractice() {
 
   const checkForCompletion = useCallback((text: string) => {
     if (completionTriggeredRef.current) return;
-    if (text.toUpperCase().includes("PRACTICE COMPLETE")) {
+    const upper = text.toUpperCase();
+    if (
+      upper.includes("PRACTICE COMPLETE") ||
+      upper.includes("LESSON COMPLETE") ||
+      upper.includes("PRACTICE IS COMPLETE") ||
+      upper.includes("LESSON IS COMPLETE") ||
+      (upper.includes("COMPLETE") && (upper.includes("GREAT JOB") || upper.includes("WELL DONE") || upper.includes("AMAZING")))
+    ) {
+      console.log("[completion] Detected completion phrase in:", text.slice(-80));
       handleCompletionRef.current();
     }
   }, []);
