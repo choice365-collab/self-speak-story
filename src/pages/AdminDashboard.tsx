@@ -108,6 +108,14 @@ export default function AdminDashboard() {
   const [verbFilterStatus, setVerbFilterStatus] = useState<"all" | "active" | "inactive">("all");
   const [selectedVerbIds, setSelectedVerbIds] = useState<Set<string>>(new Set());
 
+  // Inline verb editing
+  const [editingVerbId, setEditingVerbId] = useState<string | null>(null);
+  const [verbEditForm, setVerbEditForm] = useState<{
+    verb_key: string; base_verb: string; meaning_en: string;
+    anchor_short_1: string; anchor_long_1: string; display_no: string;
+  }>({ verb_key: "", base_verb: "", meaning_en: "", anchor_short_1: "", anchor_long_1: "", display_no: "" });
+  const [savingVerb, setSavingVerb] = useState(false);
+
   // Dev mode & hard delete
   const [devMode, setDevMode] = useState(false);
   const [hardDeleteVerbId, setHardDeleteVerbId] = useState<string | null>(null);
@@ -575,17 +583,35 @@ export default function AdminDashboard() {
         return;
       }
 
+      // Build map by display_no for upsert, fallback to verb_key
       const { data: existingVerbs } = await supabase
         .from("verbs")
-        .select("id, verb_key");
-      const existingMap = new Map((existingVerbs || []).map(v => [v.verb_key, v.id]));
+        .select("id, verb_key, display_no");
+      const existingByDisplayNo = new Map<number, string>();
+      const existingByVerbKey = new Map<string, string>();
+      for (const v of (existingVerbs || [])) {
+        if (v.display_no != null) existingByDisplayNo.set(v.display_no, v.id);
+        existingByVerbKey.set(v.verb_key, v.id);
+      }
 
-      const toUpdate = verbRows.filter(v => existingMap.has(v.verb_key));
-      const toInsert = verbRows.filter(v => !existingMap.has(v.verb_key));
+      const toUpdate: { id: string; data: any }[] = [];
+      const toInsert: any[] = [];
 
-      for (const v of toUpdate) {
-        const { created_by: _cb, verb_key: _vk, ...updateData } = v;
-        await supabase.from("verbs").update(updateData).eq("verb_key", v.verb_key);
+      for (const v of verbRows) {
+        // Match by display_no first, then verb_key
+        const matchId = (v.display_no != null && existingByDisplayNo.has(v.display_no))
+          ? existingByDisplayNo.get(v.display_no)!
+          : existingByVerbKey.get(v.verb_key) || null;
+        if (matchId) {
+          const { created_by: _cb, ...updateData } = v;
+          toUpdate.push({ id: matchId, data: updateData });
+        } else {
+          toInsert.push(v);
+        }
+      }
+
+      for (const { id, data } of toUpdate) {
+        await supabase.from("verbs").update(data).eq("id", id);
       }
 
       const insertRows = toInsert.map(v => {
@@ -1432,55 +1458,130 @@ export default function AdminDashboard() {
                 <div className="space-y-2">
                   {filtered.map((v) => (
                     <Card key={v.id} className={`rounded-xl kid-shadow transition-colors ${!v.is_active ? "bg-muted/50 border-muted" : ""}`}>
-                      <CardContent className="pt-3 pb-2 flex items-center gap-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedVerbIds.has(v.id)}
-                          onChange={() => {
-                            setSelectedVerbIds(prev => {
-                              const next = new Set(prev);
-                              if (next.has(v.id)) next.delete(v.id); else next.add(v.id);
-                              return next;
-                            });
-                          }}
-                          className="h-5 w-5 rounded shrink-0 accent-primary"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant="outline" className="rounded-full text-xs font-black px-1.5 py-0 shrink-0">#{v.display_no ?? v.verb_no}</Badge>
-                            <span className={`font-bold ${!v.is_active ? "text-muted-foreground" : ""}`}>{formatVerbKey(v.verb_key, v.meaning_en)}</span>
-                            {v.is_active ? (
-                              <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px] px-1.5 py-0">
-                                <CheckCircle2 className="h-3 w-3 mr-0.5" /> Active
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="rounded-full text-muted-foreground border-muted-foreground/30 text-[10px] px-1.5 py-0">
-                                <XCircle className="h-3 w-3 mr-0.5" /> Inactive
-                              </Badge>
+                      <CardContent className="pt-3 pb-2">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedVerbIds.has(v.id)}
+                            onChange={() => {
+                              setSelectedVerbIds(prev => {
+                                const next = new Set(prev);
+                                if (next.has(v.id)) next.delete(v.id); else next.add(v.id);
+                                return next;
+                              });
+                            }}
+                            className="h-5 w-5 rounded shrink-0 accent-primary"
+                          />
+                          {editingVerbId === v.id ? (
+                            <div className="flex-1 min-w-0 space-y-2">
+                              <div className="grid grid-cols-3 gap-2">
+                                <div>
+                                  <Label className="text-[10px] text-muted-foreground">Display #</Label>
+                                  <Input value={verbEditForm.display_no} onChange={e => setVerbEditForm(f => ({ ...f, display_no: e.target.value }))} className="h-8 rounded-lg text-sm" type="number" />
+                                </div>
+                                <div>
+                                  <Label className="text-[10px] text-muted-foreground">Base Verb</Label>
+                                  <Input value={verbEditForm.base_verb} onChange={e => setVerbEditForm(f => ({ ...f, base_verb: e.target.value }))} className="h-8 rounded-lg text-sm" />
+                                </div>
+                                <div>
+                                  <Label className="text-[10px] text-muted-foreground">Verb Key</Label>
+                                  <Input value={verbEditForm.verb_key} onChange={e => setVerbEditForm(f => ({ ...f, verb_key: e.target.value }))} className="h-8 rounded-lg text-sm" />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <Label className="text-[10px] text-muted-foreground">Meaning (EN)</Label>
+                                  <Input value={verbEditForm.meaning_en} onChange={e => setVerbEditForm(f => ({ ...f, meaning_en: e.target.value }))} className="h-8 rounded-lg text-sm" />
+                                </div>
+                                <div>
+                                  <Label className="text-[10px] text-muted-foreground">Anchor Long 1</Label>
+                                  <Input value={verbEditForm.anchor_long_1} onChange={e => setVerbEditForm(f => ({ ...f, anchor_long_1: e.target.value }))} className="h-8 rounded-lg text-sm" />
+                                </div>
+                              </div>
+                              <div className="flex gap-2 justify-end">
+                                <Button size="sm" variant="ghost" className="rounded-lg h-7 text-xs" onClick={() => setEditingVerbId(null)}>
+                                  <X className="h-3 w-3 mr-1" /> Cancel
+                                </Button>
+                                <Button size="sm" className="rounded-lg h-7 text-xs" disabled={savingVerb} onClick={async () => {
+                                  setSavingVerb(true);
+                                  try {
+                                    const updates: any = {};
+                                    if (verbEditForm.base_verb !== v.base_verb) updates.base_verb = verbEditForm.base_verb;
+                                    if (verbEditForm.verb_key !== v.verb_key) updates.verb_key = verbEditForm.verb_key;
+                                    if (verbEditForm.meaning_en !== (v.meaning_en || "")) updates.meaning_en = verbEditForm.meaning_en || null;
+                                    if (verbEditForm.anchor_long_1 !== (v.anchor_long_1 || "")) updates.anchor_long_1 = verbEditForm.anchor_long_1 || null;
+                                    const newNo = verbEditForm.display_no ? parseInt(verbEditForm.display_no) : null;
+                                    if (newNo !== (v.display_no ?? null)) updates.display_no = newNo;
+                                    if (Object.keys(updates).length === 0) { setEditingVerbId(null); return; }
+                                    const { error } = await supabase.from("verbs").update(updates).eq("id", v.id);
+                                    if (error) throw error;
+                                    setVerbs(prev => prev.map(vv => vv.id === v.id ? { ...vv, ...updates } : vv));
+                                    setEditingVerbId(null);
+                                    toast.success("Verb updated ✅");
+                                  } catch (err: any) {
+                                    toast.error(err.message || "Update failed");
+                                  } finally {
+                                    setSavingVerb(false);
+                                  }
+                                }}>
+                                  <Save className="h-3 w-3 mr-1" /> Save
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge variant="outline" className="rounded-full text-xs font-black px-1.5 py-0 shrink-0">#{v.display_no ?? v.verb_no}</Badge>
+                                <span className={`font-bold ${!v.is_active ? "text-muted-foreground" : ""}`}>{formatVerbKey(v.verb_key, v.meaning_en)}</span>
+                                {v.is_active ? (
+                                  <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px] px-1.5 py-0">
+                                    <CheckCircle2 className="h-3 w-3 mr-0.5" /> Active
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="rounded-full text-muted-foreground border-muted-foreground/30 text-[10px] px-1.5 py-0">
+                                    <XCircle className="h-3 w-3 mr-0.5" /> Inactive
+                                  </Badge>
+                                )}
+                              </div>
+                              <span className={`text-sm ${!v.is_active ? "text-muted-foreground/60" : "text-muted-foreground"}`}>{v.anchor_long_1 || v.meaning_en}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1 shrink-0">
+                            {editingVerbId !== v.id && (
+                              <Button size="sm" variant="ghost" className="rounded-xl h-8 w-8 p-0" onClick={() => {
+                                setEditingVerbId(v.id);
+                                setVerbEditForm({
+                                  verb_key: v.verb_key,
+                                  base_verb: v.base_verb,
+                                  meaning_en: v.meaning_en || "",
+                                  anchor_short_1: v.anchor_short_1 || "",
+                                  anchor_long_1: v.anchor_long_1 || "",
+                                  display_no: v.display_no != null ? String(v.display_no) : "",
+                                });
+                              }}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Switch
+                              checked={v.is_active}
+                              onCheckedChange={async (checked) => {
+                                const { error } = await supabase.from("verbs").update({ is_active: checked }).eq("id", v.id);
+                                if (error) { toast.error(error.message); return; }
+                                setVerbs(prev => prev.map(verb => verb.id === v.id ? { ...verb, is_active: checked } : verb));
+                                toast.success(checked ? "Activated ✅" : "Deactivated 🗑️");
+                              }}
+                            />
+                            {devMode && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="rounded-xl h-8 w-8 p-0"
+                                onClick={() => { setHardDeleteVerbId(v.id); setHardDeleteConfirmText(""); }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             )}
                           </div>
-                          <span className={`text-sm ${!v.is_active ? "text-muted-foreground/60" : "text-muted-foreground"}`}>{v.anchor_long_1 || v.meaning_en}</span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Switch
-                            checked={v.is_active}
-                            onCheckedChange={async (checked) => {
-                              const { error } = await supabase.from("verbs").update({ is_active: checked }).eq("id", v.id);
-                              if (error) { toast.error(error.message); return; }
-                              setVerbs(prev => prev.map(verb => verb.id === v.id ? { ...verb, is_active: checked } : verb));
-                              toast.success(checked ? "Activated ✅" : "Deactivated 🗑️");
-                            }}
-                          />
-                          {devMode && (
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              className="rounded-xl h-8 w-8 p-0"
-                              onClick={() => { setHardDeleteVerbId(v.id); setHardDeleteConfirmText(""); }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
                         </div>
                       </CardContent>
                     </Card>
