@@ -124,6 +124,17 @@ export function useRealtimeWebRTC() {
     setConvState("AI_SPEAKING");
   }, [setConvState, setMicTrackEnabled]);
 
+  /** Send session.update to replace system instructions mid-session */
+  const sendSessionUpdate = useCallback((newInstructions: string) => {
+    const dc = dcRef.current;
+    if (!dc || dc.readyState !== "open") return;
+    dc.send(JSON.stringify({
+      type: "session.update",
+      session: { instructions: newInstructions },
+    }));
+    console.log("[session.update] instructions replaced for Phase 3");
+  }, []);
+
   // ── Connect ──
 
   const connect = useCallback(async (options: ConnectOptions = {}) => {
@@ -364,5 +375,6 @@ export function useRealtimeWebRTC() {
     setMicEnabled,
     setSpeakerMuted,
     sendUserText,
+    sendSessionUpdate,
   };
 }
