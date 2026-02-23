@@ -331,8 +331,9 @@ export default function SpeakingPractice() {
   const conversationLogRef = useRef<{ role: string; text: string; ts: number }[]>([]);
   const currentSessionIdRef = useRef<string | null>(null);
   const previousConversationLogRef = useRef<{ role: string; text: string; ts: number }[]>([]);
-  const lastDeltaTimeRef = useRef(0);
+  const firstDeltaTimeRef = useRef(0);
   const [aiStreamActive, setAiStreamActive] = useState(false);
+  const aiStreamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Hook
   const {
@@ -452,14 +453,28 @@ export default function SpeakingPractice() {
   const handleAiTextDelta = useCallback((delta: string) => {
     streamingTextRef.current += delta;
     setStreamingText(streamingTextRef.current);
-    lastDeltaTimeRef.current = Date.now();
+    if (!firstDeltaTimeRef.current) firstDeltaTimeRef.current = Date.now();
+    // Cancel any pending "stream done" timer — AI is still generating
+    if (aiStreamTimerRef.current) { clearTimeout(aiStreamTimerRef.current); aiStreamTimerRef.current = null; }
     setAiStreamActive(true);
     // Backup detection: check streaming text even before done event
     checkForCompletion(streamingTextRef.current);
   }, [checkForCompletion]);
 
   const handleAiTranscriptDone = useCallback((text: string) => {
-    setAiStreamActive(false);
+    // Estimate remaining audio playback time from word count
+    // OpenAI TTS speaks at ~2.5 words/sec; text generation is faster than audio
+    const wordCount = text.split(/\s+/).length;
+    const estimatedAudioMs = (wordCount / 2.5) * 1000;
+    const textGenMs = Date.now() - (firstDeltaTimeRef.current || Date.now());
+    const remainingMs = Math.max(500, estimatedAudioMs - textGenMs);
+    firstDeltaTimeRef.current = 0; // reset for next response
+    console.log(`[audio-estimate] words=${wordCount}, estAudio=${Math.round(estimatedAudioMs)}ms, textGen=${Math.round(textGenMs)}ms, remaining=${Math.round(remainingMs)}ms`);
+    // Keep aiStreamActive true until estimated audio finishes
+    aiStreamTimerRef.current = setTimeout(() => {
+      setAiStreamActive(false);
+      aiStreamTimerRef.current = null;
+    }, remainingMs);
     // Finalize: move streaming text into transcripts
     setTranscripts((prev) => [...prev, { role: "assistant", text, timestamp: Date.now() }]);
     setStreamingText("");
@@ -627,6 +642,9 @@ export default function SpeakingPractice() {
       onUserTranscript: handleUserTranscript,
       onStateChange: (state) => {
         if (state === "STUDENT_SPEAKING") {
+          // Student interrupted (barge-in) — immediately clear teacher indicator
+          if (aiStreamTimerRef.current) { clearTimeout(aiStreamTimerRef.current); aiStreamTimerRef.current = null; }
+          setAiStreamActive(false);
           streamingTextRef.current = "";
           setStreamingText("");
         }
