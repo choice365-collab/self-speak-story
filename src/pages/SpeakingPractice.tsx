@@ -331,6 +331,8 @@ export default function SpeakingPractice() {
   const conversationLogRef = useRef<{ role: string; text: string; ts: number }[]>([]);
   const currentSessionIdRef = useRef<string | null>(null);
   const previousConversationLogRef = useRef<{ role: string; text: string; ts: number }[]>([]);
+  const lastDeltaTimeRef = useRef(0);
+  const [aiStreamActive, setAiStreamActive] = useState(false);
 
   // Hook
   const {
@@ -348,6 +350,8 @@ export default function SpeakingPractice() {
 
   const isConnected = connectionState === "connected";
   const isConnecting = connectionState === "connecting";
+  // AI is "speaking" if hook says so OR if text deltas are actively streaming
+  const teacherActive = isAiSpeaking || aiStreamActive;
 
   // ── Side effects ──
 
@@ -448,11 +452,14 @@ export default function SpeakingPractice() {
   const handleAiTextDelta = useCallback((delta: string) => {
     streamingTextRef.current += delta;
     setStreamingText(streamingTextRef.current);
+    lastDeltaTimeRef.current = Date.now();
+    setAiStreamActive(true);
     // Backup detection: check streaming text even before done event
     checkForCompletion(streamingTextRef.current);
   }, [checkForCompletion]);
 
   const handleAiTranscriptDone = useCallback((text: string) => {
+    setAiStreamActive(false);
     // Finalize: move streaming text into transcripts
     setTranscripts((prev) => [...prev, { role: "assistant", text, timestamp: Date.now() }]);
     setStreamingText("");
@@ -640,12 +647,12 @@ export default function SpeakingPractice() {
   }, [verbData, profile, connect, handleAiTextDelta, handleAiTranscriptDone, handleUserTranscript, setMicEnabled, loadPreviousSession]);
 
   const toggleMute = useCallback(() => {
-    if (isAiSpeaking) return;
+    if (teacherActive) return;
     const next = !userMuted;
     setUserMuted(next);
     userMutedRef.current = next;
     setMicEnabled(!next);
-  }, [isAiSpeaking, userMuted, setMicEnabled]);
+  }, [teacherActive, userMuted, setMicEnabled]);
 
   const autoExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -756,18 +763,18 @@ export default function SpeakingPractice() {
       {/* Status orb — fixed between header and subtitles */}
       {(isConnected || isConnecting) && (
         <div className="flex-shrink-0 flex flex-col items-center py-4 border-b">
-          <div className={"relative w-28 h-28 rounded-full flex items-center justify-center transition-all duration-500 " + (
-            isAiSpeaking ? "bg-accent/20 shadow-[0_0_40px_hsl(var(--accent)/0.3)]"
+           <div className={"relative w-28 h-28 rounded-full flex items-center justify-center transition-all duration-500 " + (
+            teacherActive ? "bg-accent/20 shadow-[0_0_40px_hsl(var(--accent)/0.3)]"
               : isConnected ? "bg-secondary/20 shadow-[0_0_40px_hsl(var(--secondary)/0.3)]"
               : "bg-primary/20 animate-pulse"
           )}>
-            <span className="text-4xl">{isConnected ? (isAiSpeaking ? "🔊" : "🎤") : "⏳"}</span>
-            {isConnected && isAiSpeaking && <div className="absolute inset-0 rounded-full border-2 border-accent/40 animate-ping" />}
+            <span className="text-4xl">{isConnected ? (teacherActive ? "🔊" : "🎤") : "⏳"}</span>
+            {isConnected && teacherActive && <div className="absolute inset-0 rounded-full border-2 border-accent/40 animate-ping" />}
           </div>
           {isConnected && (
             <div className="mt-2 text-center">
-              <span className={"text-xs font-bold " + (isAiSpeaking ? "text-accent" : "text-secondary")}>
-                {isAiSpeaking ? "🔊 Teacher speaking…" : "🎤 Your turn — speak now!"}
+              <span className={"text-xs font-bold " + (teacherActive ? "text-accent" : "text-secondary")}>
+                {teacherActive ? "🔊 Teacher speaking…" : "🎤 Your turn — speak now!"}
               </span>
             </div>
           )}
@@ -846,7 +853,7 @@ export default function SpeakingPractice() {
           </Button>
         ) : (
           <div className="flex gap-3 justify-center">
-            <Button onClick={toggleMute} variant={userMuted ? "destructive" : "outline"} className="h-16 w-16 rounded-2xl kid-shadow" disabled={!isConnected || isAiSpeaking}>
+            <Button onClick={toggleMute} variant={userMuted ? "destructive" : "outline"} className="h-16 w-16 rounded-2xl kid-shadow" disabled={!isConnected || teacherActive}>
               {userMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
             </Button>
             <Button onClick={async () => { await savePartialSession(); disconnect(); navigate("/"); }} variant="destructive" className="h-16 px-8 text-lg font-bold rounded-2xl kid-shadow gap-2">
