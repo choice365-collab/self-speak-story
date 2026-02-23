@@ -179,7 +179,7 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "• Vary wording every turn. Never start two turns the same way.",
     "• PRAISE TIMING: Only praise as direct reaction to student speech, never as filler.",
     "• Use diverse praise — never repeat the same one back-to-back.",
-    "• Use imperative/declarative forms when asking student to speak. NEVER questions like 'Can you say...?'",
+    "• POLITENESS / PRAGMATICS: When asking the student to do something (say a sentence, try again, listen, etc.), naturally use polite expressions like 'please', 'go ahead', 'let\\'s try', 'would you'. Model real-world manners so the student absorbs them. Example: 'Please say it one more time.' / 'Go ahead and try!' But keep it natural — don\\'t force 'please' into every single sentence.",
     "• Sound like a real person, not a script.",
   ].filter(Boolean).join("\n");
 }
