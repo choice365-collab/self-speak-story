@@ -44,8 +44,6 @@ export function useRealtimeWebRTC() {
   const lastBargeInRef = useRef<number>(0);
   const audioHealAttemptedRef = useRef(false);
   const silentDeltaCountRef = useRef(0);
-  const gotAudioForResponseRef = useRef(false);
-  const responseRetryCountRef = useRef(0);
 
   // ── Helpers ──
 
@@ -225,17 +223,6 @@ export function useRealtimeWebRTC() {
           const ev = JSON.parse(e.data);
           const type = ev.type as string;
 
-          // ── ERROR EVENTS ──
-          if (type === "error") {
-            console.error("[realtime error]", JSON.stringify(ev.error || ev));
-          }
-
-          // ── RESPONSE CREATED — reset audio tracking ──
-          if (type === "response.created") {
-            gotAudioForResponseRef.current = false;
-            console.log("[debug] response.created id:", ev.response?.id);
-          }
-
           // ── STUDENT STARTS SPEAKING (barge-in with 300ms delay + 800ms cooldown) ──
           if (type === "input_audio_buffer.speech_started") {
             console.log("[debug] speech_started");
@@ -308,7 +295,6 @@ export function useRealtimeWebRTC() {
 
           // ── AUDIO DELTA — unmute speaker for new AI audio ──
           if (type === "response.audio.delta") {
-            gotAudioForResponseRef.current = true;
             healAudio();
             silentDeltaCountRef.current = 0; // audio is flowing, reset counter
             if (convStateRef.current !== "AI_SPEAKING") setConvState("AI_SPEAKING");
@@ -316,25 +302,9 @@ export function useRealtimeWebRTC() {
 
           // ── RESPONSE DONE — open mic for next turn ──
           if (type === "response.done") {
-            const respStatus = ev.response?.status;
-            const statusDetails = ev.response?.status_details;
-            console.log("[debug] response.done status:", respStatus, "details:", JSON.stringify(statusDetails || {}), "gotAudio:", gotAudioForResponseRef.current);
-            
+            console.log("[debug] response.done");
             audioHealAttemptedRef.current = false; // reset for next response
             silentDeltaCountRef.current = 0;
-
-            // ── Auto-retry on empty/failed response (max 2 retries) ──
-            if (!gotAudioForResponseRef.current && responseRetryCountRef.current < 2) {
-              responseRetryCountRef.current++;
-              console.warn("[retry] Empty response detected, retrying... attempt", responseRetryCountRef.current);
-              const d = dcRef.current;
-              if (d && d.readyState === "open") {
-                d.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio", "text"] } }));
-              }
-              return; // Don't transition to IDLE yet
-            }
-
-            responseRetryCountRef.current = 0; // reset on successful response
             setConvState("IDLE");
             setMicTrackEnabled(true);
           }
