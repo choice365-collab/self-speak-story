@@ -21,10 +21,9 @@ type Session = {
   conversation_log: ConversationEntry[] | null;
 };
 
-// Returns true if the text is primarily English (Latin alphabet)
+// Returns true if the text contains NO Korean (Hangul) characters
 function isEnglish(text: string): boolean {
-  const cleaned = text.replace(/[^a-zA-Z\u00C0-\u024F\u1E00-\u1EFF\s]/g, "");
-  return cleaned.length >= text.replace(/\s/g, "").length * 0.5;
+  return !/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(text);
 }
 
 /** Extract quoted target sentences from AI text */
