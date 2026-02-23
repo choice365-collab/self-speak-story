@@ -303,10 +303,16 @@ export function useRealtimeWebRTC() {
           // ── RESPONSE DONE — open mic for next turn ──
           if (type === "response.done") {
             console.log("[debug] response.done");
-            audioHealAttemptedRef.current = false; // reset for next response
+            audioHealAttemptedRef.current = false;
             silentDeltaCountRef.current = 0;
-            setConvState("IDLE");
-            setMicTrackEnabled(true);
+            // Delay IDLE transition to let WebRTC audio buffer finish playback
+            setTimeout(() => {
+              // Only transition if still AI_SPEAKING (not interrupted by student)
+              if (convStateRef.current === "AI_SPEAKING") {
+                setConvState("IDLE");
+                setMicTrackEnabled(true);
+              }
+            }, 1200);
           }
 
           // ── USER TRANSCRIPT ──
