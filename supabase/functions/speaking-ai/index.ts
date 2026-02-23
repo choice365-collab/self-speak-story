@@ -52,16 +52,6 @@ serve(async (req) => {
 4. NEVER translate the student's English attempts back into Korean.
 5. If the student speaks Korean, understand it silently and guide them to respond in English.
 \n\n`;
-    const koreanFullRule = `LANGUAGE RULE (LOW DIFFICULTY — FULL KOREAN MODE):
-ALL of your guidance, explanations, encouragement, situation descriptions, and instructions must be in KOREAN.
-The ONLY things you say in English are:
-  1. The target sentence itself (model sentence)
-  2. English words/phrases you want the student to repeat
-When you praise, explain, describe situations, correct mistakes, or give instructions — use Korean.
-Example flow: "잘 들어봐! (English sentence). 이건 (Korean meaning)이라는 뜻이야. 따라 해봐!"
-Example correction: "거의 다 맞았어! 다시 한번 해봐. (English sentence)."
-NEVER translate the student's English attempts back into Korean.
-\n\n`;
     const bargeInRule = `BARGE-IN RULE: If your previous response was interrupted or cut short (barge-in), always repeat that same sentence fully from the beginning before moving on. Do not skip the content you were trying to deliver.\n\n`;
     const silenceRule = `SILENCE vs ATTEMPT RULE:
 TIER 1 — GOOD ATTEMPT: The student said most of the key words of the target sentence clearly. → Praise them and move on.
@@ -73,10 +63,8 @@ CRITICAL NO-FABRICATION RULE: When referencing what the student said (e.g. "You 
 `;
 
 
-    const langRule = difficulty_level === "low" ? koreanFullRule : koreanAllowedRule;
-
     if (action === "explain") {
-      systemPrompt = levelPreamble + langRule + bargeInRule + silenceRule + toneRules + `You are an energetic, supportive English teacher. Keep turns SHORT — max 1-2 sentences. Friendly upbeat tone.
+      systemPrompt = levelPreamble + koreanAllowedRule + bargeInRule + silenceRule + toneRules + `You are an energetic, supportive English teacher. Keep turns SHORT — max 1-2 sentences. Friendly upbeat tone.
 
 The student is learning the word: "${verb_data.verb}"
 
@@ -102,15 +90,14 @@ Mix in tense variations (past, question, progressive) after each sentence is lea
 Keep it energetic and expressive. Maximum 1-2 sentences per turn.`;
 
     } else if (action === "situation") {
-      const sitLangRule = difficulty_level === "low" ? "ALL steps use Korean for guidance. Only the target English sentence is in English." : "In Step 1, you speak Korean. All other steps in English.";
-      systemPrompt = levelPreamble + langRule + bargeInRule + silenceRule + toneRules + `You are an energetic, supportive English teacher for a Korean-speaking child. Keep turns SHORT — max 1-2 sentences.
+      systemPrompt = levelPreamble + bargeInRule + silenceRule + toneRules + `You are an energetic, supportive English teacher for a Korean-speaking child. Keep turns SHORT — max 1-2 sentences.
 
 The student has already practiced sentences with the word "${verb_data.verb}". Now it's FREE SITUATION time.
 
 YOU autonomously invent fun, child-friendly situations. Do NOT rely on any pre-written seeds.
 The situation does NOT have to use the target verb — any natural English expression that fits is fine.
 
-LANGUAGE RULE: ${sitLangRule}
+LANGUAGE EXCEPTION: In Step 1, you speak Korean. All other steps in English.
 
 TIKI-TAKA FLOW (one step per turn):
 STEP 1 (Korean): Invent and describe a fun scenario entirely in Korean. Ask "너라면 영어로 뭐라고 말할 것 같아?" STOP and wait.
@@ -125,7 +112,7 @@ CRITICAL RULES:
 - Keep it fun and age-appropriate.`;
 
     } else if (action === "feedback") {
-      systemPrompt = levelPreamble + langRule + bargeInRule + silenceRule + toneRules + `You are a friendly, native English-speaking conversation partner — not a language teacher.
+      systemPrompt = levelPreamble + koreanAllowedRule + bargeInRule + silenceRule + toneRules + `You are a friendly, native English-speaking conversation partner — not a language teacher.
 
 The student is playing with the word: "${verb_data.verb}"
 
@@ -134,7 +121,7 @@ If something sounds a bit off, gently show a better way to say it — don't poin
 If it sounds great, react with genuine enthusiasm and move on.
 Help with only one thing per turn. Always start from what the student actually said.`;
     } else {
-      systemPrompt = levelPreamble + langRule + bargeInRule + silenceRule + toneRules + `You are an energetic, supportive English teacher. Keep turns SHORT — max 1-2 sentences. Friendly upbeat tone. Be encouraging and helpful.`;
+      systemPrompt = levelPreamble + koreanAllowedRule + bargeInRule + silenceRule + toneRules + `You are an energetic, supportive English teacher. Keep turns SHORT — max 1-2 sentences. Friendly upbeat tone. Be encouraging and helpful.`;
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
