@@ -44,12 +44,18 @@ function isEcho(teacherText: string, studentText: string): boolean {
 }
 
 /** Process conversation_log into display entries */
-function processConversationLog(log: ConversationEntry[]): { role: "teacher" | "student"; text: string }[] {
-  const result: { role: "teacher" | "student"; text: string }[] = [];
+function processConversationLog(log: ConversationEntry[]): { role: "teacher" | "student" | "separator"; text: string }[] {
+  const result: { role: "teacher" | "student" | "separator"; text: string }[] = [];
   const seenTeacherTargets = new Set<string>();
   let lastStudentText = "";
 
   for (const entry of log) {
+    // Handle session resume separator
+    if (entry.role === "system" && entry.text.includes("Session Resumed")) {
+      result.push({ role: "separator", text: "--- Session Resumed ---" });
+      continue;
+    }
+
     if (entry.role === "student") {
       if (!isEnglish(entry.text)) continue;
       result.push({ role: "student", text: entry.text });
@@ -75,13 +81,12 @@ function processConversationLog(log: ConversationEntry[]): { role: "teacher" | "
 function buildFallbackEntries(
   studentTranscripts: string[] | null,
   aiTranscripts: string[] | null
-): { role: "teacher" | "student"; text: string }[] {
-  const result: { role: "teacher" | "student"; text: string }[] = [];
+): { role: "teacher" | "student" | "separator"; text: string }[] {
+  const result: { role: "teacher" | "student" | "separator"; text: string }[] = [];
   const seenTeacherTargets = new Set<string>();
   const studentLines = (studentTranscripts || []).filter(isEnglish);
   const aiLines = aiTranscripts || [];
 
-  // Interleave: ai first, then student, alternating
   const maxLen = Math.max(aiLines.length, studentLines.length);
   for (let i = 0; i < maxLen; i++) {
     if (i < aiLines.length) {
@@ -154,7 +159,7 @@ export default function TranscriptReport({
           Task: taskLabel || "",
           Date: date,
           Duration: duration,
-          Role: e.role === "teacher" ? "Teacher" : "Student",
+          Role: e.role === "separator" ? "---" : e.role === "teacher" ? "Teacher" : "Student",
           Transcript: e.text,
         });
       }
@@ -213,7 +218,13 @@ export default function TranscriptReport({
                   ) : (
                     <div className="space-y-1">
                       {entries.map((e, i) =>
-                        e.role === "teacher" ? (
+                        e.role === "separator" ? (
+                          <div key={i} className="flex items-center gap-2 py-2">
+                            <div className="flex-1 h-px bg-border" />
+                            <span className="text-xs text-muted-foreground font-semibold whitespace-nowrap">🔄 Session Resumed</span>
+                            <div className="flex-1 h-px bg-border" />
+                          </div>
+                        ) : e.role === "teacher" ? (
                           <div key={i} className="text-sm bg-primary/10 rounded-lg px-3 py-1.5">
                             <span className="text-primary font-bold mr-1">🤖 (teacher)</span>
                             <span className="text-primary font-semibold">{e.text}</span>
