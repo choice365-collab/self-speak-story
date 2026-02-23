@@ -210,6 +210,81 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
   ].filter(Boolean).join("\n");
 }
 
+/** Phase 3-only instructions — sent via session.update when Phase 3 is detected */
+function buildPhase3Instructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
+  const situations = [verb.situation_seed_1, verb.situation_seed_2, verb.situation_seed_3, verb.situation_seed_4].filter(Boolean);
+  const sitList = situations.map((s, i) => "  " + (i + 1) + ". " + s).join("\n");
+  const shortExamples = [verb.anchor_short_1, verb.anchor_short_2, verb.anchor_short_3].filter(Boolean);
+  const longExamples = [verb.anchor_long_1, verb.anchor_long_2, verb.anchor_long_3].filter(Boolean);
+  const shortList = shortExamples.map((e, i) => "  " + (i + 1) + '. "' + e + '"').join("\n");
+  const longList = longExamples.map((e, i) => "  " + (i + 1) + '. "' + e + '"').join("\n");
+
+  const worldContext = "WORLD CONTEXT: Your student lives in a child's world. Use vocabulary and scenarios from: playing with friends, animals, pets, toys, food (snacks, lunch, dinner), family, school life, playground, singing, drawing, sleeping, running, jumping, hiding, hobbies, sports, travel, holidays. AVOID: work, meetings, business, driving, money, office, schedules, appointments, commuting, or any adult-life vocabulary.";
+  const difficultyGuides: Record<string, string> = {
+    low: "Speak as if your student is a 4-year-old American child. " + worldContext,
+    medium: "Speak as if your student is a 7-year-old American child. " + worldContext,
+    high: "Speak as if your student is a 10-year-old American child.",
+  };
+  const speedGuides: Record<string, string> = {
+    slow: "Keep each turn to 1-2 short sentences.",
+    medium: "Keep each turn to 2-3 sentences.",
+    fast: "You can use 3-4 sentences per turn.",
+  };
+
+  return [
+    "You are an energetic, friendly native English teacher. You just finished teaching short and long sentences with the verb \"" + verb.base_verb + "\".",
+    "Now you are in PHASE 3: FREE SITUATIONS. This is a COMPLETELY DIFFERENT phase.",
+    "",
+    "VOCABULARY/GRAMMAR: " + (difficultyGuides[difficultyLevel] || difficultyGuides["medium"]),
+    "TURN LENGTH: " + (speedGuides[speechSpeed] || speedGuides["medium"]),
+    "",
+    "Situation seeds:",
+    sitList,
+    "",
+    "TARGET SENTENCES THE STUDENT LEARNED (use as building blocks):",
+    shortList,
+    longList,
+    "",
+    "GOAL: Help the student BUILD THEIR OWN sentence using \"" + verb.base_verb + "\" through a Korean-first scaffolding process.",
+    "The student thinks in Korean first, then constructs in English.",
+    "",
+    "You must do 2 situation rounds. For each round, follow these steps STRICTLY in order:",
+    "",
+    "STEP 1 — KOREAN SITUATION + QUESTION (speak ENTIRELY in Korean):",
+    "   Pick a situation seed and describe a fun scenario ENTIRELY IN KOREAN.",
+    "   Then ask IN KOREAN: '너라면 뭐라고 말할 것 같아?' or '이런 상황에서 뭐라고 하면 좋을까?'",
+    "   Example: '자, 지금 네가 저녁을 먹고 있는데, 브로콜리가 나왔어. 너는 브로콜리가 너무 싫어! 너라면 뭐라고 말할 것 같아?'",
+    "   CRITICAL: Do NOT say ANYTHING in English in Step 1. The ENTIRE step must be Korean.",
+    "   WAIT for the student to answer (they will answer in Korean).",
+    "",
+    "STEP 2 — ACKNOWLEDGE + ENGLISH HINT (switch to English):",
+    "   Acknowledge what the student said in English: 'Oh, that's a great idea!'",
+    "   Give an English HINT using '" + verb.base_verb + "', but NEVER give the full sentence.",
+    "   Say: 'Now try saying that in English! Use the word \"" + verb.base_verb + "\"... what would you say?'",
+    "   Or: 'Start with \"" + verb.base_verb + " it...\" and tell me!'",
+    "   FORBIDDEN: Never say the complete English sentence for them.",
+    "   WAIT for the student to try in English.",
+    "",
+    "STEP 3 — CORRECT AND POLISH (English only):",
+    "   If good: 'That's great! Just a tiny bit better:' → give polished version → ask them to say it once.",
+    "   If partial: 'Almost! You said ___' (quote ONLY actual words) → show better version → try again.",
+    "   If silence: 'Go ahead, try it in English! Use \"" + verb.base_verb + "\"...'",
+    "   After 2 failed attempts: Model the full sentence and ask them to say it once.",
+    "",
+    "STEP 4 — FINAL REPEAT (English only):",
+    "   Have them say it ONE more time clearly. Praise and move on.",
+    "",
+    "After 2 situations, say \"PRACTICE COMPLETE!\" to end.",
+    "",
+    "RULES:",
+    "• Step 1 is the ONLY step where you speak Korean. Steps 2-4 must be entirely English.",
+    "• NEVER give the full English answer in Step 2. Hints only!",
+    "• When quoting what the student said, only quote their ACTUAL words.",
+    "• Keep maximum 2 sentences per turn.",
+    "• Start Round 1 NOW by describing a situation in Korean.",
+  ].join("\n");
+}
+
 // ── Component ──
 
 export default function SpeakingPractice() {
@@ -254,7 +329,10 @@ export default function SpeakingPractice() {
     disconnect,
     setMicEnabled,
     sendUserText,
+    sendSessionUpdate,
   } = useRealtimeWebRTC();
+
+  const phase3UpdatedRef = useRef(false);
 
   const isConnected = connectionState === "connected";
   const isConnecting = connectionState === "connecting";
@@ -372,6 +450,26 @@ export default function SpeakingPractice() {
     aiTranscriptsRef.current.push(text);
     conversationLogRef.current.push({ role: "teacher", text, ts: Date.now() });
 
+    // ── Phase 3 detection: when AI mentions "situation" or phase transition keywords ──
+    if (!phase3UpdatedRef.current && verbData) {
+      const upper = text.toUpperCase();
+      const aiCount = aiTranscriptsRef.current.length;
+      // Detect Phase 3 transition: AI has done ~8+ turns (Phase 1: ~4, Phase 2: ~4) 
+      // OR AI explicitly mentions moving to situations/phase 3
+      const phase3Keywords = upper.includes("SITUATION") && (upper.includes("PHASE 3") || upper.includes("FREE") || upper.includes("NOW LET"));
+      const longEnough = aiCount >= 7;
+      if (phase3Keywords || (longEnough && (upper.includes("SITUATION") || upper.includes("상황")))) {
+        console.log("[phase3] Detected Phase 3 transition at AI turn", aiCount);
+        phase3UpdatedRef.current = true;
+        const phase3Instructions = buildPhase3Instructions(
+          verbData,
+          profile?.difficulty_level || "medium",
+          profile?.speech_speed || "medium",
+        );
+        sendSessionUpdate(phase3Instructions);
+      }
+    }
+
     // Check for corrections
     const corrMatch = text.match(/CORRECTION:\s*(.+)/i);
     const youSaid = text.match(/You said:\s*(.+)/i);
@@ -380,7 +478,7 @@ export default function SpeakingPractice() {
     }
     // Primary detection (case-insensitive)
     checkForCompletion(text);
-  }, [addCorrection, checkForCompletion]);
+  }, [addCorrection, checkForCompletion, verbData, profile, sendSessionUpdate]);
 
   const handleUserTranscript = useCallback((text: string) => {
     totalAudioSecondsRef.current += 5;
@@ -388,7 +486,7 @@ export default function SpeakingPractice() {
       userTranscriptsRef.current.push(text.trim());
       conversationLogRef.current.push({ role: "student", text: text.trim(), ts: Date.now() });
     }
-    if (containsKorean(text)) {
+    if (containsKorean(text) && !phase3UpdatedRef.current) {
       sendUserText('The student said something in Korean: "' + text + '". Infer what they meant. Respond ONLY in English.');
     }
   }, [sendUserText]);
@@ -464,6 +562,7 @@ export default function SpeakingPractice() {
     aiTranscriptsRef.current = [];
     conversationLogRef.current = [];
     completionTriggeredRef.current = false;
+    phase3UpdatedRef.current = false;
 
     // Check for previous paused session
     const lastTeacherText = await loadPreviousSession();
