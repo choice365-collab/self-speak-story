@@ -94,6 +94,7 @@ export default function AdminDashboard() {
 
   // Task filter
   const [selectedStudentId, setSelectedStudentId] = useState<string>("");
+  const [taskVerbSearch, setTaskVerbSearch] = useState("");
   const [taskRangeFrom, setTaskRangeFrom] = useState("");
   const [taskRangeTo, setTaskRangeTo] = useState("");
 
@@ -967,6 +968,15 @@ export default function AdminDashboard() {
                   ]);
                 })()}
               </select>
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                <Input
+                  value={taskVerbSearch}
+                  onChange={(e) => setTaskVerbSearch(e.target.value)}
+                  placeholder="Search base verb..."
+                  className="h-10 rounded-xl text-base pl-10"
+                />
+              </div>
               <div className="flex gap-2">
                 <Input
                   type="number" placeholder="From #" value={taskRangeFrom}
@@ -994,6 +1004,7 @@ export default function AdminDashboard() {
                           const no = v.display_no ?? v.verb_no;
                           if (!isNaN(from) && no < from) return false;
                           if (!isNaN(to) && no > to) return false;
+                          if (taskVerbSearch && !v.base_verb.toLowerCase().includes(taskVerbSearch.toLowerCase())) return false;
                           return true;
                         });
                         const targetStudents = selectedStudentId.startsWith("group:") 
@@ -1038,6 +1049,7 @@ export default function AdminDashboard() {
                           const no = v.display_no ?? v.verb_no;
                           if (!isNaN(from) && no < from) return false;
                           if (!isNaN(to) && no > to) return false;
+                          if (taskVerbSearch && !v.base_verb.toLowerCase().includes(taskVerbSearch.toLowerCase())) return false;
                           return true;
                         }).map(v => v.id));
                         const targetStudentIds = selectedStudentId.startsWith("group:")
@@ -1086,6 +1098,7 @@ export default function AdminDashboard() {
                     const no = v.display_no ?? v.verb_no;
                     if (!isNaN(from) && no < from) return false;
                     if (!isNaN(to) && no > to) return false;
+                    if (taskVerbSearch && !v.base_verb.toLowerCase().includes(taskVerbSearch.toLowerCase())) return false;
                     return true;
                   });
 
