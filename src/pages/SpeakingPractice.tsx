@@ -282,6 +282,18 @@ function buildPhase3Instructions(verb: VerbData, difficultyLevel: string, speech
     "• When quoting what the student said, only quote their ACTUAL words.",
     "• Keep maximum 2 sentences per turn.",
     "• Start Round 1 NOW by describing a situation in Korean.",
+    "",
+    "═══ COMMON RULES (apply at all times) ═══",
+    "• SILENCE vs ATTEMPT RULE:",
+    "  TIER 1 — GOOD ATTEMPT: Student said most key words clearly. → Praise and move on.",
+    "  TIER 2 — PARTIAL ATTEMPT: Some words but incomplete/errors. → 'Almost!' + model correct sentence + retry.",
+    "  TIER 3 — SILENCE / NO MEANINGFUL SPEECH: Nothing meaningful heard. → 'I didn\\'t hear you — go ahead, try it!' Do NOT pretend they spoke.",
+    "• NO-FABRICATION RULE: When referencing what the student said ('You said ___'), ONLY quote words they ACTUALLY spoke. NEVER add or complete words they didn\\'t say.",
+    "• QUOTED QUESTION PLACEMENT: Quoted sentences ending with '?' must be placed at the VERY END of your turn for proper TTS intonation.",
+    "• MODEL SENTENCE FRAMING RULE: Never use colons/quotation marks to frame model sentences. End instruction with a period, then say the model sentence as a SEPARATE STANDALONE sentence.",
+    "• PRAISE TIMING RULE: NEVER use praise unless directly responding to something the student just said.",
+    "• Fix only ONE mistake per turn. Keep corrections brief.",
+    "• When the student interrupts (barge-in), stop and listen. After they finish, repeat the same sentence from the beginning.",
   ].join("\n");
 }
 
@@ -450,16 +462,16 @@ export default function SpeakingPractice() {
     aiTranscriptsRef.current.push(text);
     conversationLogRef.current.push({ role: "teacher", text, ts: Date.now() });
 
-    // ── Phase 3 detection: when AI mentions "situation" or phase transition keywords ──
+    // ── Phase 3 detection: keyword-based with high turn-count safety net ──
     if (!phase3UpdatedRef.current && verbData) {
       const upper = text.toUpperCase();
       const aiCount = aiTranscriptsRef.current.length;
-      // Detect Phase 3 transition: AI has done ~8+ turns (Phase 1: ~4, Phase 2: ~4) 
-      // OR AI explicitly mentions moving to situations/phase 3
-      const phase3Keywords = upper.includes("SITUATION") || upper.includes("PHASE 3") || upper.includes("상황") || upper.includes("NOW LET'S") || upper.includes("LAST PART");
-      const longEnough = aiCount >= 5;
-      if (phase3Keywords || longEnough) {
-        console.log("[phase3] Detected Phase 3 transition at AI turn", aiCount);
+      // Primary: AI explicitly mentions transition to situations
+      const phase3Keywords = upper.includes("SITUATION") || upper.includes("PHASE 3") || upper.includes("상황");
+      // Safety net: if AI somehow never says the keyword, force after 12 turns
+      const safetyFallback = aiCount >= 12;
+      if (phase3Keywords || safetyFallback) {
+        console.log("[phase3] Detected Phase 3 transition at AI turn", aiCount, phase3Keywords ? "(keyword)" : "(safety fallback)");
         phase3UpdatedRef.current = true;
         const phase3Instructions = buildPhase3Instructions(
           verbData,
@@ -467,6 +479,10 @@ export default function SpeakingPractice() {
           profile?.speech_speed || "medium",
         );
         sendSessionUpdate(phase3Instructions);
+        // Force Korean scaffolding start with a hidden nudge
+        setTimeout(() => {
+          sendUserText("Start Phase 3 now. Begin Step 1 entirely in Korean.", true);
+        }, 500);
       }
     }
 
