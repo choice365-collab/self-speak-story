@@ -103,6 +103,8 @@ export default function AdminDashboard() {
 
   // Verb filter & selection
   const [verbSearch, setVerbSearch] = useState("");
+  const [verbRangeFrom, setVerbRangeFrom] = useState("");
+  const [verbRangeTo, setVerbRangeTo] = useState("");
   const [verbFilterStatus, setVerbFilterStatus] = useState<"all" | "active" | "inactive">("all");
   const [selectedVerbIds, setSelectedVerbIds] = useState<Set<string>>(new Set());
 
@@ -1342,12 +1344,24 @@ export default function AdminDashboard() {
             </Button>
           )}
           <div className="relative">
-            <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+            <Search className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
             <Input
               value={verbSearch}
               onChange={(e) => setVerbSearch(e.target.value)}
-              placeholder="Search verbs..."
-              className="h-11 rounded-xl text-base pl-10"
+              placeholder="Search base verb..."
+              className="h-10 rounded-xl text-base pl-10"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Input
+              type="number" placeholder="From #" value={verbRangeFrom}
+              onChange={(e) => setVerbRangeFrom(e.target.value)}
+              className="h-10 rounded-xl text-base w-28"
+            />
+            <Input
+              type="number" placeholder="To #" value={verbRangeTo}
+              onChange={(e) => setVerbRangeTo(e.target.value)}
+              className="h-10 rounded-xl text-base w-28"
             />
           </div>
 
@@ -1389,10 +1403,15 @@ export default function AdminDashboard() {
 
           {(() => {
             const searchLower = verbSearch.toLowerCase();
+            const vFrom = parseInt(verbRangeFrom);
+            const vTo = parseInt(verbRangeTo);
             const filtered = verbs.filter(v => {
               if (verbFilterStatus === "active" && !v.is_active) return false;
               if (verbFilterStatus === "inactive" && v.is_active) return false;
-              if (searchLower && !v.base_verb.toLowerCase().includes(searchLower) && !v.verb_key.toLowerCase().includes(searchLower) && !(v.meaning_en || "").toLowerCase().includes(searchLower)) return false;
+              if (searchLower && !v.base_verb.toLowerCase().includes(searchLower)) return false;
+              const no = v.display_no ?? v.verb_no;
+              if (!isNaN(vFrom) && no < vFrom) return false;
+              if (!isNaN(vTo) && no > vTo) return false;
               return true;
             });
 
