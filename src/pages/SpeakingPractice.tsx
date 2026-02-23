@@ -456,9 +456,9 @@ export default function SpeakingPractice() {
       const aiCount = aiTranscriptsRef.current.length;
       // Detect Phase 3 transition: AI has done ~8+ turns (Phase 1: ~4, Phase 2: ~4) 
       // OR AI explicitly mentions moving to situations/phase 3
-      const phase3Keywords = upper.includes("SITUATION") && (upper.includes("PHASE 3") || upper.includes("FREE") || upper.includes("NOW LET"));
-      const longEnough = aiCount >= 7;
-      if (phase3Keywords || (longEnough && (upper.includes("SITUATION") || upper.includes("상황")))) {
+      const phase3Keywords = upper.includes("SITUATION") || upper.includes("PHASE 3") || upper.includes("상황") || upper.includes("NOW LET'S") || upper.includes("LAST PART");
+      const longEnough = aiCount >= 5;
+      if (phase3Keywords || longEnough) {
         console.log("[phase3] Detected Phase 3 transition at AI turn", aiCount);
         phase3UpdatedRef.current = true;
         const phase3Instructions = buildPhase3Instructions(
@@ -596,7 +596,7 @@ export default function SpeakingPractice() {
       instructions: resumeInstructions,
       voice: ["shimmer", "coral", "sage", "alloy", "ash", "echo", "verse", "ballad"][Math.floor(Math.random() * 8)],
       preUnlockedAudio: unlockAudio,
-      turnDetection: { type: "server_vad", threshold: 0.75, prefix_padding_ms: 400, silence_duration_ms: 700 },
+      turnDetection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 500, silence_duration_ms: 1500 },
       inputAudioTranscription: { model: "gpt-4o-mini-transcribe" },
       speed: profile?.speech_speed || "medium",
       onAiTextDelta: handleAiTextDelta,
