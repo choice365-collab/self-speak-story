@@ -235,7 +235,7 @@ export function useRealtimeWebRTC() {
               } else {
                 // Wait 300ms — if speech_stopped arrives, it was noise
                 bargeInTimerRef.current = setTimeout(() => {
-                  console.log("[debug] barge-in confirmed after 300ms");
+                  console.log("[debug] barge-in confirmed after 500ms");
                   lastBargeInRef.current = Date.now();
                   // Silence speaker without stopping playback (muted breaks mobile resume)
                   if (audioRef.current) audioRef.current.volume = 0;
@@ -247,7 +247,7 @@ export function useRealtimeWebRTC() {
                   }
                   setConvState("STUDENT_SPEAKING");
                   setMicTrackEnabled(true);
-                }, 300);
+                }, 500);
               }
             } else {
               // Not during AI speech — switch immediately
