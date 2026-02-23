@@ -45,6 +45,13 @@ serve(async (req) => {
     const levelPreamble = `DIFFICULTY: ${difficulty_level.toUpperCase()} - ${diffGuide}\nSPEED: ${speech_speed.toUpperCase()} - ${spdGuide}\n\n`;
 
     const englishOnlyRule = `ABSOLUTE LANGUAGE RULE: You must NEVER output any Korean text, characters, or translations. Every single word you produce must be English. You may internally understand Korean input from the student, but your response must be 100% English. Do not translate into Korean. Do not explain meanings in Korean. Do not acknowledge that the student spoke Korean. If the student uses Korean or mixes Korean, silently infer their intended meaning, reformulate it as a correct English sentence, and continue the lesson entirely in English. This rule overrides all other instructions and must never be violated.\n\n`;
+    const koreanAllowedRule = `LANGUAGE RULE: You speak MOSTLY in English, but you ARE allowed to use Korean in these specific cases:
+1. After presenting a target English sentence, you MUST explain its meaning in Korean. Format: Say the English sentence first, then say "이건 [Korean meaning] 이라는 뜻이야."
+2. When the student seems confused or doesn't understand, briefly explain in Korean what you want them to do.
+3. All other speech must remain in English.
+4. NEVER translate the student's English attempts back into Korean.
+5. If the student speaks Korean, understand it silently and guide them to respond in English.
+\n\n`;
     const bargeInRule = `BARGE-IN RULE: If your previous response was interrupted or cut short (barge-in), always repeat that same sentence fully from the beginning before moving on. Do not skip the content you were trying to deliver.\n\n`;
     const silenceRule = `SILENCE vs ATTEMPT RULE:
 TIER 1 — GOOD ATTEMPT: The student said most of the key words of the target sentence clearly. → Praise them and move on.
@@ -57,7 +64,7 @@ CRITICAL NO-FABRICATION RULE: When referencing what the student said (e.g. "You 
 
 
     if (action === "explain") {
-      systemPrompt = levelPreamble + englishOnlyRule + bargeInRule + silenceRule + toneRules + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone.
+      systemPrompt = levelPreamble + koreanAllowedRule + bargeInRule + silenceRule + toneRules + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone.
 
 The student is learning the word: "${verb_data.verb}"
 
@@ -129,7 +136,7 @@ CRITICAL RULES:
 - Keep the scenario fun, age-appropriate, and connected to the student's world.`;
 
     } else if (action === "feedback") {
-      systemPrompt = levelPreamble + englishOnlyRule + bargeInRule + silenceRule + toneRules + `You are a friendly, native English-speaking conversation partner — not a language teacher.
+      systemPrompt = levelPreamble + koreanAllowedRule + bargeInRule + silenceRule + toneRules + `You are a friendly, native English-speaking conversation partner — not a language teacher.
 
 The student is playing with the word: "${verb_data.verb}"
 
@@ -139,7 +146,7 @@ If it sounds great, react with genuine enthusiasm and move on.
 
 Keep it short (2-4 lines). Help with only one thing per turn. Always start from what the student actually said.`;
     } else {
-      systemPrompt = levelPreamble + englishOnlyRule + bargeInRule + silenceRule + toneRules + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone. Be encouraging and helpful.`;
+      systemPrompt = levelPreamble + koreanAllowedRule + bargeInRule + silenceRule + toneRules + `You are an energetic, supportive English teacher. Short lively sentences. Friendly upbeat tone. Be encouraging and helpful.`;
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

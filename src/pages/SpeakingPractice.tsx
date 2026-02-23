@@ -632,7 +632,7 @@ export default function SpeakingPractice() {
 
     await connect({
       instructions: resumeInstructions,
-      voice: ["shimmer", "coral", "sage", "alloy", "ash", "echo", "verse", "ballad"][Math.floor(Math.random() * 8)],
+      voice: ["alloy", "ash", "echo", "shimmer"][Math.floor(Math.random() * 4)],
       preUnlockedAudio: unlockAudio,
       turnDetection: { type: "server_vad", threshold: 0.75, prefix_padding_ms: 400, silence_duration_ms: 1000 },
       inputAudioTranscription: { model: "gpt-4o-mini-transcribe" },
