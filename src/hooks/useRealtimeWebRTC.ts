@@ -44,6 +44,8 @@ export function useRealtimeWebRTC() {
   const lastBargeInRef = useRef<number>(0);
   const audioHealAttemptedRef = useRef(false);
   const silentDeltaCountRef = useRef(0);
+  const lastAudioDeltaRef = useRef<number>(0);
+  const idlePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Helpers ──
 
@@ -296,23 +298,30 @@ export function useRealtimeWebRTC() {
           // ── AUDIO DELTA — unmute speaker for new AI audio ──
           if (type === "response.audio.delta") {
             healAudio();
-            silentDeltaCountRef.current = 0; // audio is flowing, reset counter
+            silentDeltaCountRef.current = 0;
+            lastAudioDeltaRef.current = Date.now();
             if (convStateRef.current !== "AI_SPEAKING") setConvState("AI_SPEAKING");
           }
 
-          // ── RESPONSE DONE — open mic for next turn ──
+          // ── RESPONSE DONE — poll until audio buffer drains, then go IDLE ──
           if (type === "response.done") {
             console.log("[debug] response.done");
             audioHealAttemptedRef.current = false;
             silentDeltaCountRef.current = 0;
-            // Delay IDLE transition to let WebRTC audio buffer finish playback
-            setTimeout(() => {
-              // Only transition if still AI_SPEAKING (not interrupted by student)
-              if (convStateRef.current === "AI_SPEAKING") {
-                setConvState("IDLE");
-                setMicTrackEnabled(true);
+            // Enable mic immediately so VAD can detect student speech
+            setMicTrackEnabled(true);
+            // Poll: wait until no audio delta for 2s, then transition to IDLE
+            if (idlePollRef.current) clearInterval(idlePollRef.current);
+            idlePollRef.current = setInterval(() => {
+              const elapsed = Date.now() - lastAudioDeltaRef.current;
+              if (elapsed >= 2000) {
+                if (idlePollRef.current) { clearInterval(idlePollRef.current); idlePollRef.current = null; }
+                if (convStateRef.current === "AI_SPEAKING") {
+                  console.log("[debug] audio buffer drained → IDLE");
+                  setConvState("IDLE");
+                }
               }
-            }, 1200);
+            }, 300);
           }
 
           // ── USER TRANSCRIPT ──
@@ -354,6 +363,7 @@ export function useRealtimeWebRTC() {
 
   const disconnect = useCallback(() => {
     if (bargeInTimerRef.current) { clearTimeout(bargeInTimerRef.current); bargeInTimerRef.current = null; }
+    if (idlePollRef.current) { clearInterval(idlePollRef.current); idlePollRef.current = null; }
     dcRef.current?.close();
     pcRef.current?.close();
     streamRef.current?.getTracks().forEach((t) => t.stop());
