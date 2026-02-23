@@ -596,7 +596,7 @@ export default function SpeakingPractice() {
       instructions: resumeInstructions,
       voice: ["shimmer", "coral", "sage", "alloy", "ash", "echo", "verse", "ballad"][Math.floor(Math.random() * 8)],
       preUnlockedAudio: unlockAudio,
-      turnDetection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 500, silence_duration_ms: 1500 },
+      turnDetection: { type: "server_vad", threshold: 0.75, prefix_padding_ms: 400, silence_duration_ms: 1500 },
       inputAudioTranscription: { model: "gpt-4o-mini-transcribe" },
       speed: profile?.speech_speed || "medium",
       onAiTextDelta: handleAiTextDelta,
