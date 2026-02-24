@@ -77,23 +77,40 @@ function buildRulesBlock(): string {
   return [
     "── RULES ──",
     "• SILENCE: nothing heard → 'I didn't hear you — try it!' Never pretend they spoke.",
-    "• PARTIAL: incomplete → 'Almost!' + model correct + retry.",
     "• NO-FABRICATION: only quote words student ACTUALLY said.",
     "• Model sentences as standalone (no colons/quotes). BAD: 'Say this: \"I have a plan.\"' GOOD: 'Now say it. I have a plan.'",
     "• Questions must be short standalone sentences for proper TTS.",
-    "• Fix only ONE mistake per turn. Create situation first, never just 'repeat after me'.",
+    "• Fix only ONE mistake per turn.",
     "• On barge-in, stop and listen, then repeat what you were saying.",
     "• Vary wording every turn.",
   ].join("\n");
 }
 
+function buildCorrectionProtocol(): string {
+  return [
+    "── CORRECTION PROTOCOL (apply in ALL phases) ──",
+    "When the student makes a mistake:",
+    "1) Acknowledge what they said: 'I heard you say [actual words].' (no fabrication)",
+    "2) Model the correct sentence clearly.",
+    "3) Ask them to try again: 'Now you try!' → WAIT.",
+    "4) If still wrong, model again and ask once more → WAIT.",
+    "5) If correct, praise briefly and move on.",
+    "This loop is MANDATORY for every student utterance that contains errors.",
+  ].join("\n");
+}
+
 function buildToneBlock(): string {
   return [
-    "── TONE ──",
+    "── TONE & LANGUAGE ──",
     "Talk like a fun older friend. Never say: sentence, verb, correct, repeat, example, practice, mistake, error, response, translate, grammar, past tense.",
     "Use natural alternatives: 'this one', 'say it again', 'listen to this', 'almost!', 'nice!', 'let's try'.",
     "Praise ONLY as direct reaction to student speech, never as filler. Vary praise words.",
     "When asking student to do something, use 'please', 'go ahead', 'let's try'. For imperative targets, soften with 'Please ~' or 'Can you ~?'.",
+    "",
+    "── LANGUAGE RULE ──",
+    "ALL instructions, praise, corrections, and transition cues MUST be in English.",
+    "Use Korean ONLY for explaining sentence meanings ('이건 ... 이라는 뜻이야.').",
+    "NEVER say instructions like '잘했어요', '다시 말해볼까요', '과거형으로 해볼게요' in Korean. Say them in English.",
   ].join("\n");
 }
 
@@ -116,6 +133,8 @@ function buildPhase1Instructions(verb: VerbData, difficultyLevel: string, speech
     "",
     buildToneBlock(),
     "",
+    buildCorrectionProtocol(),
+    "",
     "── YOUR TASK: SHORT SENTENCES (do Short-1 then Short-2, in order) ──",
     shortList,
     "",
@@ -124,7 +143,7 @@ function buildPhase1Instructions(verb: VerbData, difficultyLevel: string, speech
     "Each round:",
     "1) Say the target sentence clearly → WAIT for student to repeat.",
     "2) After repeat: praise + Korean meaning → ask to say it ONE MORE TIME → WAIT.",
-    "3) React/correct → WAIT.",
+    "3) Apply CORRECTION PROTOCOL if needed → WAIT.",
     "",
     "TENSE VARIATIONS (both Short-1 and Short-2):",
     "After the student has practiced the base sentence, transform it into these forms:",
@@ -133,7 +152,7 @@ function buildPhase1Instructions(verb: VerbData, difficultyLevel: string, speech
     `- Progressive (-ing) — ONLY if it makes natural sense for the verb "${verb.base_verb}". If the verb does not naturally take progressive form (e.g. stative verbs like 'know', 'have', 'like'), SKIP progressive.`,
     "For each tense form: say it clearly with Korean meaning → student repeats TWICE.",
     "",
-    'After finishing ALL tense variations for Short-2, say exactly "SHORT DONE" and stop. Do NOT continue to any other phase.',
+    'After finishing ALL tense variations for Short-2, say a natural transition like "OK, now let\'s try some longer ones!" and then output the marker SHORT DONE on its own.',
     "",
     buildRulesBlock(),
   ].join("\n");
@@ -158,6 +177,8 @@ function buildPhase2Instructions(verb: VerbData, difficultyLevel: string, speech
     "",
     buildToneBlock(),
     "",
+    buildCorrectionProtocol(),
+    "",
     "── YOUR TASK: LONG SENTENCES (do Long-1 then Long-2, in order) ──",
     longList,
     "",
@@ -167,9 +188,9 @@ function buildPhase2Instructions(verb: VerbData, difficultyLevel: string, speech
     "Each round:",
     "1) Say the target sentence clearly → WAIT for student to repeat.",
     "2) After repeat: praise + Korean meaning → ask to say it ONE MORE TIME → WAIT.",
-    "3) React/correct → WAIT.",
+    "3) Apply CORRECTION PROTOCOL if needed → WAIT.",
     "",
-    'After finishing Long-2, say exactly "LONG DONE" and stop. Do NOT continue to any other phase.',
+    'After finishing Long-2, say a natural transition like "Now let\'s try a fun situation!" and then output the marker LONG DONE on its own.',
     "",
     buildRulesBlock(),
   ].join("\n");
@@ -197,19 +218,21 @@ function buildPhase3Instructions(verb: VerbData, difficultyLevel: string, speech
     "",
     "NO TENSE VARIATIONS. Do NOT transform sentences into past/question/progressive forms.",
     "",
+    buildToneBlock(),
+    "",
     `GOAL: Student builds own sentence using "${verb.base_verb}" through Korean-first scaffolding.`,
     "",
     "Each round — follow strictly:",
     "STEP 1 (Korean ONLY): Describe fun scenario in Korean. Ask '너라면 영어로 뭐라고 말할 것 같아?' WAIT.",
-    `STEP 2 (English): Acknowledge + give hint using "${verb.base_verb}" (1-2 words). NEVER full sentence. WAIT.`,
-    "STEP 3: Correct/polish. After 2 fails, model full sentence. Give Korean meaning for the final sentence.",
-    "STEP 4: Final repeat once. Praise, move on.",
+    `STEP 2 (English): Acknowledge what they said + give a hint using "${verb.base_verb}" (1-2 words, NOT the full sentence). WAIT for student to try.`,
+    "STEP 3: Listen to student's attempt. Correct and polish into a complete sentence. Give Korean meaning. Then say: 'Now say it after me!' and model the complete sentence. WAIT.",
+    "STEP 4: Student repeats. Apply CORRECTION PROTOCOL if needed. Then ask them to say it ONE MORE TIME. WAIT.",
+    "STEP 5: Student repeats again. Praise and move to next round.",
     'After 2 rounds, say "PRACTICE COMPLETE!"',
     "",
     "── RULES ──",
-    "• Step 1 = Korean only. Steps 2-4 = English only (except Korean meaning explanation).",
+    "• Step 1 = Korean only. Steps 2-5 = English only (except Korean meaning explanation).",
     "• SILENCE: nothing heard → 'I didn't hear you — try it!' Never pretend they spoke.",
-    "• PARTIAL: 'Almost!' + model correct + retry.",
     "• NO-FABRICATION: only quote words student ACTUALLY said.",
     "• Model sentences as standalone (no colons/quotes).",
     "• Fix ONE mistake per turn. Praise only as reaction to speech.",
@@ -406,11 +429,12 @@ export default function SpeakingPractice() {
     conversationLogRef.current.push({ role: "teacher", text, ts: Date.now() });
 
     // ── Phase transition detection: SHORT DONE → Phase 2, LONG DONE → Phase 3 ──
-    if (verbData) {
+    // IMPORTANT: Once Phase 3 is active, NEVER re-trigger Phase 1 or 2 transitions
+    if (verbData && !completionTriggeredRef.current) {
       const upper = text.toUpperCase();
 
-      // SHORT DONE → inject Phase 2
-      if (!phase2UpdatedRef.current && upper.includes("SHORT DONE")) {
+      // SHORT DONE → inject Phase 2 (only if Phase 3 not yet active)
+      if (!phase2UpdatedRef.current && !phase3UpdatedRef.current && upper.includes("SHORT DONE")) {
         console.log("[phase2] Detected SHORT DONE at AI turn", aiTranscriptsRef.current.length);
         phase2UpdatedRef.current = true;
         const phase2Instructions = buildPhase2Instructions(
@@ -424,7 +448,7 @@ export default function SpeakingPractice() {
         }, 500);
       }
 
-      // LONG DONE → inject Phase 3
+      // LONG DONE → inject Phase 3 (only if Phase 2 done and Phase 3 not yet active)
       if (!phase3UpdatedRef.current && phase2UpdatedRef.current && upper.includes("LONG DONE")) {
         console.log("[phase3] Detected LONG DONE at AI turn", aiTranscriptsRef.current.length);
         phase3UpdatedRef.current = true;
