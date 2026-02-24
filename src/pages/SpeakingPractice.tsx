@@ -310,8 +310,7 @@ export default function SpeakingPractice() {
       upper.includes("PRACTICE COMPLETE") ||
       upper.includes("LESSON COMPLETE") ||
       upper.includes("PRACTICE IS COMPLETE") ||
-      upper.includes("LESSON IS COMPLETE") ||
-      (upper.includes("COMPLETE") && (upper.includes("GREAT JOB") || upper.includes("WELL DONE") || upper.includes("AMAZING")))
+      upper.includes("LESSON IS COMPLETE")
     ) {
       console.log("[completion] Detected completion phrase in:", text.slice(-80));
       handleCompletionRef.current();
