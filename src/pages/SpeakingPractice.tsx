@@ -34,10 +34,13 @@ function containsKorean(text: string): boolean {
   return /[가-힣]/.test(text);
 }
 
-/** Renders text with quoted phrases highlighted and Korean hints styled */
+/** Renders text with quoted phrases highlighted and Korean hints styled.
+ *  Strips [TARGET] markers so they never appear in subtitles. */
 function HighlightedText({ text }: { text: string }) {
+  // Strip [TARGET] markers from display
+  const cleaned = text.replace(/\[TARGET\]\s*/g, "");
   // Match: "quoted text" optionally followed by (Korean hint)
-  const parts = text.split(/(".*?"(?:\s*\([^)]*\))?)/g);
+  const parts = cleaned.split(/(".*?"(?:\s*\([^)]*\))?)/g);
   return (
     <>
       {parts.map((part, i) => {
@@ -141,24 +144,28 @@ function buildPhase1Instructions(verb: VerbData, difficultyLevel: string, speech
     "",
     buildCorrectionProtocol(),
     "",
-    "── YOUR TASK: SHORT SENTENCES (do Short-1 then Short-2, in order) ──",
+    "── YOUR TASK: SHORT SENTENCES (do Short-1 then Short-2, in order — do NOT skip any) ──",
     shortList,
+    "",
+    "CRITICAL: You MUST complete Short-1 (base + all tense variations) BEFORE moving to Short-2. You MUST also complete Short-2 (base + all tense variations) BEFORE saying SHORT DONE. Do NOT skip Short-2.",
     "",
     "NO SITUATION SETUP. Do NOT create imaginary scenarios or situations. Just present the sentence directly and have the student repeat it.",
     "",
-    "Each round:",
-    "1) Say the target sentence clearly.",
+    "Each round (EXACT ORDER — follow strictly):",
+    "1) Say the target sentence clearly with [TARGET] prefix.",
     "2) Immediately explain its meaning in Korean: '이건 [Korean meaning] 이라는 뜻이야.'",
-    "3) Say the target sentence again → WAIT for student to repeat.",
+    "3) Say the target sentence AGAIN clearly with [TARGET] prefix → WAIT for student to repeat.",
     "4) Apply CORRECTION PROTOCOL if needed → then ask to say it ONE MORE TIME → WAIT.",
     "5) When repeating the same sentence again, do NOT repeat the Korean explanation.",
+    "",
+    "IMPORTANT: Step 3 is MANDATORY — you must say the target sentence a SECOND TIME before asking the student to repeat. Never skip step 3.",
     "",
     "TENSE VARIATIONS (both Short-1 and Short-2):",
     "After the student has practiced the base sentence, transform it into these forms:",
     "- Past tense",
     "- Question form",
     `- Progressive (-ing) — ONLY if it makes natural sense for the verb "${verb.base_verb}". If the verb does not naturally take progressive form (e.g. stative verbs like 'know', 'have', 'like'), SKIP progressive.`,
-    "For each tense form: say it clearly → Korean meaning → say it again → student repeats TWICE. Do NOT repeat Korean meaning on the second repeat.",
+    "For each tense form: follow the SAME steps 1-5 above (say it → Korean → say it again → student repeats).",
     "",
     'After finishing ALL tense variations for Short-2, say a natural transition like "OK, now let\'s try some longer ones!" and then output the marker SHORT DONE on its own.',
     "",
@@ -193,22 +200,26 @@ function buildPhase2Instructions(verb: VerbData, difficultyLevel: string, speech
     "",
     buildCorrectionProtocol(),
     "",
-    "── YOUR TASK: LONG SENTENCES (do Long-1 then Long-2, in order) ──",
+    "── YOUR TASK: LONG SENTENCES (do Long-1 then Long-2, in order — do NOT skip any) ──",
     longList,
+    "",
+    "CRITICAL: You MUST complete Long-1 (base + question form) BEFORE moving to Long-2. You MUST also complete Long-2 BEFORE saying LONG DONE. Do NOT skip Long-2.",
     "",
     "NO SITUATION SETUP. Do NOT create imaginary scenarios or situations. Just present the sentence directly.",
     "",
     "TENSE VARIATION for Long-1 ONLY:",
     "After the student has practiced the base Long-1 sentence, also practice the QUESTION FORM of Long-1.",
-    "For the question form: say it clearly → Korean meaning → say it again → student repeats TWICE.",
+    "For the question form: follow the same steps below.",
     "Do NOT do any tense variations for Long-2. Just practice Long-2 as-is.",
     "",
-    "Each round:",
-    "1) Say the target sentence clearly.",
+    "Each round (EXACT ORDER — follow strictly):",
+    "1) Say the target sentence clearly with [TARGET] prefix.",
     "2) Immediately explain its meaning in Korean: '이건 [Korean meaning] 이라는 뜻이야.'",
-    "3) Say the target sentence again → WAIT for student to repeat.",
+    "3) Say the target sentence AGAIN clearly with [TARGET] prefix → WAIT for student to repeat.",
     "4) Apply CORRECTION PROTOCOL if needed → then ask to say it ONE MORE TIME → WAIT.",
     "5) When repeating the same sentence again, do NOT repeat the Korean explanation.",
+    "",
+    "IMPORTANT: Step 3 is MANDATORY — you must say the target sentence a SECOND TIME before asking the student to repeat. Never skip step 3.",
     "",
     'After finishing Long-2, say a natural transition like "Now let\'s try a fun situation!" and then output the marker LONG DONE on its own.',
     "",
@@ -247,13 +258,15 @@ function buildPhase3Instructions(verb: VerbData, difficultyLevel: string, speech
     "",
     `GOAL: Student builds own sentence using "${verb.base_verb}" through Korean-first scaffolding.`,
     "",
-    "Each round — follow strictly:",
-    "STEP 1 (Korean ONLY): Describe a fun scenario in Korean. Then ask: '이 상황에서 뭐라고 말하고 싶어? 한국어로 말해봐!' WAIT for student to respond in Korean.",
-    "STEP 2 (Korean→English bridge): Acknowledge what they said in Korean. Then say: '좋아! 그걸 영어로 하면...' and give a small hint — just 1-2 key words using \"" + verb.base_verb + "\", NOT the full sentence. WAIT for student to try in English.",
-    "STEP 3: Listen to student's attempt. Correct and polish into a complete sentence. Give Korean meaning. Then say: 'Now say it after me!' and model the complete sentence. WAIT.",
-    "STEP 4: Student repeats. Apply CORRECTION PROTOCOL if needed. Then ask them to say it ONE MORE TIME. WAIT.",
-    "STEP 5: Student repeats again. Praise briefly in English.",
-    'Then say "Great job today! PRACTICE COMPLETE!" in English. Do NOT say completion in Korean.',
+    "CRITICAL: This is EXACTLY 1 round. After the student successfully repeats TWICE, you MUST say PRACTICE COMPLETE. Do NOT start a new situation or propose another sentence.",
+    "",
+    "The round — follow strictly:",
+    "STEP 1 (Korean ONLY): Describe a fun scenario in Korean. Then ask: '이 상황에서 뭐라고 말하고 싶어? 한국어로 말해봐!' WAIT for student to respond.",
+    "STEP 2 (Korean→English bridge): Acknowledge what they said. Then give a LONGER English hint — a near-complete sentence or phrase (not just 1-2 words) that uses \"" + verb.base_verb + "\". For example, give most of the sentence but leave one part for the student to fill in. WAIT for student to try in English.",
+    "STEP 3: Listen to student's attempt. Correct and polish into a COMPLETE, natural sentence (aim for 6+ words — make it a full, meaningful sentence, not a short fragment). Explain Korean meaning: '이건 [Korean meaning] 이라는 뜻이야.' Then say the complete sentence with [TARGET] prefix. Say: 'Now say it after me!' WAIT.",
+    "STEP 4: Student repeats. Apply CORRECTION PROTOCOL if needed. Then say: 'One more time!' WAIT.",
+    "STEP 5: Student repeats again. Praise briefly.",
+    'Then IMMEDIATELY say "Great job today! PRACTICE COMPLETE!" — Do NOT propose another situation. Do NOT continue. The lesson is OVER.',
     "",
     "── RULES ──",
     "• Steps 1-2 = Korean (with English hint words). Steps 3-5 = English only (except Korean meaning explanation).",
@@ -262,7 +275,8 @@ function buildPhase3Instructions(verb: VerbData, difficultyLevel: string, speech
     "• Model sentences as standalone (no colons/quotes).",
     "• Fix ONE mistake per turn. Praise only as reaction to speech.",
     "• On barge-in, stop, listen, then repeat.",
-    "• Start Round 1 NOW in Korean.",
+    "• After STEP 5, you MUST end with PRACTICE COMPLETE. NO EXCEPTIONS. Do NOT add more rounds.",
+    "• Start the round NOW in Korean.",
   ].join("\n");
 }
 
