@@ -21,57 +21,46 @@ type Session = {
   conversation_log: ConversationEntry[] | null;
 };
 
-// Returns true if the text contains only Latin/English characters (no Korean, Japanese, Chinese, etc.)
-function isEnglish(text: string): boolean {
-  // Filter out Korean, Japanese (Hiragana, Katakana, Kanji), Chinese, Cyrillic, Arabic, Thai, Devanagari
-  return !/[ㄱ-ㅎㅏ-ㅣ가-힣\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u3400-\u4DBF\u0400-\u04FF\u0600-\u06FF\u0E00-\u0E7F\u0900-\u097F]/.test(text);
+/** Strip non-Latin characters from text, keeping only English letters, digits, punctuation, spaces */
+function stripNonEnglish(text: string): string {
+  return text.replace(/[ㄱ-ㅎㅏ-ㅣ가-힣\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u3400-\u4DBF\u0400-\u04FF\u0600-\u06FF\u0E00-\u0E7F\u0900-\u097F]+/g, "").replace(/\s+/g, " ").trim();
 }
 
-/** Extract quoted target sentences from AI text */
-function extractTargetSentences(text: string): string[] {
-  const matches = text.match(/"([^"]+)"/g);
-  return matches ? matches.map(m => m.replace(/"/g, "")) : [];
+/** Returns true if text has meaningful English content (>50% Latin characters) */
+function hasMeaningfulEnglish(text: string): boolean {
+  const latinChars = (text.match(/[a-zA-Z]/g) || []).length;
+  return latinChars >= 2 && latinChars / Math.max(text.length, 1) > 0.3;
 }
 
-/** Check if teacher text is just echoing the student's previous utterance */
-function isEcho(teacherText: string, studentText: string): boolean {
-  if (!studentText) return false;
-  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
-  const tNorm = normalize(teacherText);
-  const sNorm = normalize(studentText);
-  // If teacher text contains the student text almost verbatim
-  return tNorm.includes(sNorm) && sNorm.length > 5;
+/** Normalize text for comparison */
+function normalizeForCompare(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
 }
 
 /** Process conversation_log into display entries */
 function processConversationLog(log: ConversationEntry[]): { role: "teacher" | "student" | "separator"; text: string }[] {
   const result: { role: "teacher" | "student" | "separator"; text: string }[] = [];
-  const seenTeacherTargets = new Set<string>();
-  let lastStudentText = "";
+  let lastTeacherNorm = "";
 
   for (const entry of log) {
-    // Handle session resume separator
     if (entry.role === "system" && entry.text.includes("Session Resumed")) {
       result.push({ role: "separator", text: "--- Session Resumed ---" });
       continue;
     }
 
     if (entry.role === "student") {
-      if (!isEnglish(entry.text)) continue;
-      result.push({ role: "student", text: entry.text });
-      lastStudentText = entry.text;
+      // Strip non-English, keep only meaningful English
+      const cleaned = stripNonEnglish(entry.text);
+      if (!hasMeaningfulEnglish(cleaned)) continue;
+      result.push({ role: "student", text: cleaned });
     } else if (entry.role === "teacher") {
-      // Extract target sentences only
-      const targets = extractTargetSentences(entry.text);
-      for (const target of targets) {
-        const key = target.toLowerCase().trim();
-        // Skip duplicates
-        if (seenTeacherTargets.has(key)) continue;
-        // Skip if it's just echoing what student said
-        if (isEcho(target, lastStudentText)) continue;
-        seenTeacherTargets.add(key);
-        result.push({ role: "teacher", text: target });
-      }
+      const text = entry.text.trim();
+      if (!text) continue;
+      // Skip consecutive duplicate teacher lines
+      const norm = normalizeForCompare(text);
+      if (norm === lastTeacherNorm) continue;
+      lastTeacherNorm = norm;
+      result.push({ role: "teacher", text });
     }
   }
   return result;
@@ -83,23 +72,27 @@ function buildFallbackEntries(
   aiTranscripts: string[] | null
 ): { role: "teacher" | "student" | "separator"; text: string }[] {
   const result: { role: "teacher" | "student" | "separator"; text: string }[] = [];
-  const seenTeacherTargets = new Set<string>();
-  const studentLines = (studentTranscripts || []).filter(isEnglish);
+  let lastTeacherNorm = "";
   const aiLines = aiTranscripts || [];
+  const studentLines = studentTranscripts || [];
 
   const maxLen = Math.max(aiLines.length, studentLines.length);
   for (let i = 0; i < maxLen; i++) {
     if (i < aiLines.length) {
-      const targets = extractTargetSentences(aiLines[i]);
-      for (const target of targets) {
-        const key = target.toLowerCase().trim();
-        if (seenTeacherTargets.has(key)) continue;
-        seenTeacherTargets.add(key);
-        result.push({ role: "teacher", text: target });
+      const text = aiLines[i].trim();
+      if (text) {
+        const norm = normalizeForCompare(text);
+        if (norm !== lastTeacherNorm) {
+          lastTeacherNorm = norm;
+          result.push({ role: "teacher", text });
+        }
       }
     }
     if (i < studentLines.length) {
-      result.push({ role: "student", text: studentLines[i] });
+      const cleaned = stripNonEnglish(studentLines[i]);
+      if (hasMeaningfulEnglish(cleaned)) {
+        result.push({ role: "student", text: cleaned });
+      }
     }
   }
   return result;
