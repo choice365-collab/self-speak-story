@@ -21,9 +21,10 @@ type Session = {
   conversation_log: ConversationEntry[] | null;
 };
 
-// Returns true if the text contains no Korean characters
+// Returns true if the text contains only Latin/English characters (no Korean, Japanese, Chinese, etc.)
 function isEnglish(text: string): boolean {
-  return !/[ㄱ-ㅎㅏ-ㅣ가-힣]/.test(text);
+  // Filter out Korean, Japanese (Hiragana, Katakana, Kanji), Chinese, Cyrillic, Arabic, Thai, Devanagari
+  return !/[ㄱ-ㅎㅏ-ㅣ가-힣\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u3400-\u4DBF\u0400-\u04FF\u0600-\u06FF\u0E00-\u0E7F\u0900-\u097F]/.test(text);
 }
 
 /** Extract quoted target sentences from AI text */
