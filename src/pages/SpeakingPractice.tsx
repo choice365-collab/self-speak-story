@@ -66,11 +66,12 @@ const LONG_ROUNDS = 2;
 const SITUATION_ROUNDS = 2;
 
 function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
-  const shortExamples = [verb.anchor_short_1, verb.anchor_short_2, verb.anchor_short_3].filter(Boolean);
-  const longExamples = [verb.anchor_long_1, verb.anchor_long_2, verb.anchor_long_3].filter(Boolean);
+  // Only use short1/short2 and long1/long2 (skip 3)
+  const shortExamples = [verb.anchor_short_1, verb.anchor_short_2].filter(Boolean);
+  const longExamples = [verb.anchor_long_1, verb.anchor_long_2].filter(Boolean);
 
-  const shortList = shortExamples.map((e, i) => `  ${i + 1}. "${e}"`).join("\n");
-  const longList = longExamples.map((e, i) => `  ${i + 1}. "${e}"`).join("\n");
+  const shortList = shortExamples.map((e, i) => `  Short-${i + 1}: "${e}"`).join("\n");
+  const longList = longExamples.map((e, i) => `  Long-${i + 1}: "${e}"`).join("\n");
 
   const ageMap: Record<string, string> = {
     low: "a 4-year-old", medium: "a 7-year-old", high: "a 10-year-old",
@@ -93,15 +94,15 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "Praise ONLY as direct reaction to student speech, never as filler. Vary praise words.",
     "When asking student to do something, use 'please', 'go ahead', 'let's try'. For imperative targets, soften with 'Please ~' or 'Can you ~?'.",
     "",
-    "── PHASE 1: SHORT SENTENCES (" + SHORT_ROUNDS + " rounds) ──",
+    "── PHASE 1: SHORT SENTENCES (do Short-1 then Short-2, in order) ──",
     shortList,
     "Each round: 1) Say target clearly → WAIT. 2) After repeat: praise + Korean meaning → ask to say it ONE MORE TIME → WAIT. 3) Fun situation, prompt to say it → WAIT. 4) React/correct, ask to say it once more → WAIT.",
-    "Round 1 only: after step 4, transform to ALL of these forms with Korean meaning for each: past tense, progressive (-ing), question. Ask student to say each form TWICE.",
+    "Round 1 (Short-1) only: after step 4, transform to ALL of these forms with Korean meaning for each: past tense, progressive (-ing), question. Ask student to say each form TWICE.",
     "",
-    "── PHASE 2: LONG SENTENCES (" + LONG_ROUNDS + " rounds) ──",
+    "── PHASE 2: LONG SENTENCES (do Long-1 then Long-2, in order) ──",
     longList,
-    "Same flow as Phase 1 — student says each target TWICE per step. Round 1: tense variations (past, progressive, question) at end, each said TWICE.",
-    "After Phase 2, move to Phase 3.",
+    "Same flow as Phase 1 — student says each target TWICE per step. Round 1 (Long-1): tense variations (past, progressive, question) at end, each said TWICE.",
+    "After finishing Long-2, move to Phase 3.",
     "",
     "── PHASE 3: FREE SITUATIONS (" + SITUATION_ROUNDS + " rounds) ──",
     `Student uses "${verb.base_verb}" in situations YOU create. NEVER give the answer before student tries.`,
@@ -126,8 +127,8 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
 /** Phase 3-only instructions — sent via session.update when Phase 3 is detected */
 function buildPhase3Instructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
   const situations = [verb.situation_seed_1, verb.situation_seed_2, verb.situation_seed_3, verb.situation_seed_4].filter(Boolean);
-  const sitList = situations.map((s, i) => `  ${i + 1}. ${s}`).join("\n");
-  const learned = [verb.anchor_short_1, verb.anchor_short_2, verb.anchor_short_3, verb.anchor_long_1, verb.anchor_long_2, verb.anchor_long_3]
+  const sitList = situations.map((s, i) => `  Situation-${i + 1}: ${s}`).join("\n");
+  const learned = [verb.anchor_short_1, verb.anchor_short_2, verb.anchor_long_1, verb.anchor_long_2]
     .filter(Boolean).map((e, i) => `  ${i + 1}. "${e}"`).join("\n");
 
   const ageMap: Record<string, string> = {
@@ -351,41 +352,31 @@ export default function SpeakingPractice() {
     aiTranscriptsRef.current.push(text);
     conversationLogRef.current.push({ role: "teacher", text, ts: Date.now() });
 
-    // ── Phase 3 detection: keyword-based with high turn-count safety net ──
+    // ── Phase 3 detection: keyword-only (no turn count condition) ──
     if (!phase3UpdatedRef.current && verbData) {
       const upper = text.toUpperCase();
-      const aiCount = aiTranscriptsRef.current.length;
-      // Minimum turns before Phase 3 can trigger: SHORT_ROUNDS * ~4 turns + LONG_ROUNDS * ~4 turns = ~16
-      // Use a conservative minimum of 8 AI turns to prevent premature triggering
-      const minTurnsForPhase3 = 8;
-      if (aiCount >= minTurnsForPhase3) {
-        // Primary: AI explicitly mentions transition phrases (not just casual use of "situation/상황")
-        const phase3TransitionPhrases =
-          upper.includes("PHASE 3") ||
-          upper.includes("FREE SITUATION") ||
-          upper.includes("MOVE ON TO SITUATION") ||
-          upper.includes("LET'S TRY SOME SITUATION") ||
-          upper.includes("NOW LET'S DO SITUATION") ||
-          upper.includes("첫 번째 상황") ||
-          upper.includes("상황을 이야기할게") ||
-          upper.includes("상황을 이야기 할게") ||
-          (upper.includes("상황") && (upper.includes("시작") || upper.includes("첫")));
-        // Safety net: if AI somehow never says the keyword, force after 16 turns
-        const safetyFallback = aiCount >= 16;
-        if (phase3TransitionPhrases || safetyFallback) {
-          console.log("[phase3] Detected Phase 3 transition at AI turn", aiCount, phase3TransitionPhrases ? "(keyword)" : "(safety fallback)");
-          phase3UpdatedRef.current = true;
-          const phase3Instructions = buildPhase3Instructions(
-            verbData,
-            profile?.difficulty_level || "medium",
-            profile?.speech_speed || "medium",
-          );
-          sendSessionUpdate(phase3Instructions);
-          // Force Korean scaffolding start with a hidden nudge
-          setTimeout(() => {
-            sendUserText("Start Phase 3 now. Begin Step 1 entirely in Korean.", true);
-          }, 500);
-        }
+      const phase3TransitionPhrases =
+        upper.includes("PHASE 3") ||
+        upper.includes("FREE SITUATION") ||
+        upper.includes("MOVE ON TO SITUATION") ||
+        upper.includes("LET'S TRY SOME SITUATION") ||
+        upper.includes("NOW LET'S DO SITUATION") ||
+        upper.includes("첫 번째 상황") ||
+        upper.includes("상황을 이야기할게") ||
+        upper.includes("상황을 이야기 할게") ||
+        (upper.includes("상황") && (upper.includes("시작") || upper.includes("첫")));
+      if (phase3TransitionPhrases) {
+        console.log("[phase3] Detected Phase 3 transition at AI turn", aiTranscriptsRef.current.length, "(keyword)");
+        phase3UpdatedRef.current = true;
+        const phase3Instructions = buildPhase3Instructions(
+          verbData,
+          profile?.difficulty_level || "medium",
+          profile?.speech_speed || "medium",
+        );
+        sendSessionUpdate(phase3Instructions);
+        setTimeout(() => {
+          sendUserText("Start Phase 3 now. Begin Step 1 entirely in Korean.", true);
+        }, 500);
       }
     }
 
