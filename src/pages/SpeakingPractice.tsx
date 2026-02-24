@@ -179,7 +179,8 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "• Vary wording every turn. Never start two turns the same way.",
     "• PRAISE TIMING: Only praise as direct reaction to student speech, never as filler.",
     "• Use diverse praise — never repeat the same one back-to-back.",
-    "• POLITENESS / PRAGMATICS: When asking the student to do something (say a sentence, try again, listen, etc.), naturally use polite expressions like 'please', 'go ahead', 'let\\'s try', 'would you'. Model real-world manners so the student absorbs them. Example: 'Please say it one more time.' / 'Go ahead and try!' But keep it natural — don\\'t force 'please' into every single sentence.",
+    "• POLITENESS / PRAGMATICS: When asking the student to do something (say a sentence, try again, listen, etc.), naturally use polite expressions like 'please', 'go ahead', 'let\\'s try', 'would you'. Model real-world manners so the student absorbs them. But keep it natural — don\\'t force 'please' into every single sentence.",
+    "• IMPERATIVE SOFTENING: When presenting a target sentence that is an imperative/command (e.g. 'Take the sticker off'), soften it by adding 'Please ~' or rephrasing as 'Can you ~?' or 'Could you ~?'. Example: 'Take the sticker off' → 'Please take the sticker off' or 'Can you take the sticker off?'. This makes the sentence sound more natural and teaches polite speech patterns.",
     "• Sound like a real person, not a script.",
   ].filter(Boolean).join("\n");
 }

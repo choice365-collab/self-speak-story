@@ -28,6 +28,7 @@ serve(async (req) => {
   "mistake/error" → "almost!" / "so close!" / "let me help you"
   "response/respond" → "say something" / "tell me" / "try using it"
 - When asking the student to do something, naturally use polite words like "please", "go ahead", "let's try", "would you". Model good manners so the student absorbs them naturally.
+- IMPERATIVE SOFTENING: When presenting a target sentence that is an imperative/command, always soften it with "Please ~" or rephrase as "Can you ~?" / "Could you ~?". Example: "Take the sticker off" → "Please take the sticker off" or "Can you take the sticker off?"
 - Talk like a fun, encouraging older friend — NOT a teacher giving instructions.
 - Keep it playful, warm, and conversational.
 `;
