@@ -65,13 +65,8 @@ const SHORT_ROUNDS = 2;
 const LONG_ROUNDS = 2;
 const SITUATION_ROUNDS = 2;
 
-function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
-  const shortExamples = [verb.anchor_short_1, verb.anchor_short_2, verb.anchor_short_3].filter(Boolean);
-  const longExamples = [verb.anchor_long_1, verb.anchor_long_2, verb.anchor_long_3].filter(Boolean);
-
-  const shortList = shortExamples.map((e, i) => `  ${i + 1}. "${e}"`).join("\n");
-  const longList = longExamples.map((e, i) => `  ${i + 1}. "${e}"`).join("\n");
-
+/** Shared preamble for all phases */
+function buildPreamble(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
   const ageMap: Record<string, string> = {
     low: "a 4-year-old", medium: "a 7-year-old", high: "a 10-year-old",
   };
@@ -93,24 +88,6 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
     "Praise ONLY as direct reaction to student speech, never as filler. Vary praise words.",
     "When asking student to do something, use 'please', 'go ahead', 'let's try'. For imperative targets, soften with 'Please ~' or 'Can you ~?'.",
     "",
-    "── PHASE 1: SHORT SENTENCES (" + SHORT_ROUNDS + " rounds) ──",
-    shortList,
-    "Each round: 1) Say target clearly → WAIT. 2) After repeat: praise + Korean meaning → WAIT. 3) Fun situation, prompt to say it → WAIT. 4) React/correct.",
-    "Round 1 only: after step 4, transform to past/question form with Korean meaning, ask to try once.",
-    "",
-    "── PHASE 2: LONG SENTENCES (" + LONG_ROUNDS + " rounds) ──",
-    longList,
-    "Same flow as Phase 1. Round 1: tense variation at end.",
-    "After Phase 2, move to Phase 3.",
-    "",
-    "── PHASE 3: FREE SITUATIONS (" + SITUATION_ROUNDS + " rounds) ──",
-    `Student uses "${verb.base_verb}" in situations YOU create. NEVER give the answer before student tries.`,
-    "Step 1 (Korean only): Describe scenario in Korean. Ask '너라면 영어로 뭐라고 말할 것 같아?' WAIT.",
-    "Step 2 (English): Give hint (1-2 words), NOT full sentence. WAIT.",
-    "Step 3: Correct/polish. After 2 fails, model full sentence.",
-    "Step 4: Final repeat once. Praise, move on.",
-    'After ' + SITUATION_ROUNDS + ' situations, say "PRACTICE COMPLETE!"',
-    "",
     "── RULES ──",
     "• SILENCE: nothing heard → 'I didn't hear you — try it!' Never pretend they spoke.",
     "• PARTIAL: incomplete → 'Almost!' + model correct + retry.",
@@ -123,6 +100,51 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
   ].join("\n");
 }
 
+/** Phase 1 instructions — sent at session start */
+function buildPhase1Instructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
+  const shortExamples = [verb.anchor_short_1, verb.anchor_short_2, verb.anchor_short_3].filter(Boolean);
+  const shortList = shortExamples.map((e, i) => `  ${i + 1}. "${e}"`).join("\n");
+
+  return [
+    buildPreamble(verb, difficultyLevel, speechSpeed),
+    "",
+    "══ CURRENT PHASE: SHORT SENTENCES (" + SHORT_ROUNDS + " rounds) ══",
+    shortList,
+    "",
+    "Each round — follow this tiki-taka flow (one step per turn, WAIT after each):",
+    "TURN 1: Say target sentence clearly → WAIT.",
+    "TURN 2 (after student repeats): Praise + Korean meaning ('이건 ... 이라는 뜻이야.') → WAIT.",
+    "TURN 3: Create fun situation, prompt to say it → WAIT.",
+    "TURN 4: React/correct their attempt.",
+    "Round 1 only: TURN 5 — transform to past/question form with Korean meaning, ask to try once.",
+    "",
+    "After " + SHORT_ROUNDS + " short sentences, say 'Now let's try some longer ones!' and move on.",
+  ].join("\n");
+}
+
+/** Phase 2 instructions — sent via session.update when Phase 2 is detected */
+function buildPhase2Instructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
+  const longExamples = [verb.anchor_long_1, verb.anchor_long_2, verb.anchor_long_3].filter(Boolean);
+  const longList = longExamples.map((e, i) => `  ${i + 1}. "${e}"`).join("\n");
+
+  return [
+    buildPreamble(verb, difficultyLevel, speechSpeed),
+    "",
+    "══ CURRENT PHASE: LONG SENTENCES (" + LONG_ROUNDS + " rounds) ══",
+    "The student already practiced short sentences. Now use longer ones:",
+    longList,
+    "",
+    "Same tiki-taka flow:",
+    "TURN 1: Say target clearly → WAIT.",
+    "TURN 2: Praise + Korean meaning → WAIT.",
+    "TURN 3: Fun situation, prompt to say it → WAIT.",
+    "TURN 4: React/correct.",
+    "Round 1 only: TURN 5 — tense variation (past/question/progressive) with Korean meaning.",
+    "",
+    "After " + LONG_ROUNDS + " long sentences, transition to free situations.",
+    "Start the first long sentence NOW.",
+  ].join("\n");
+}
 /** Phase 3-only instructions — sent via session.update when Phase 3 is detected */
 function buildPhase3Instructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
   const situations = [verb.situation_seed_1, verb.situation_seed_2, verb.situation_seed_3, verb.situation_seed_4].filter(Boolean);
@@ -214,6 +236,7 @@ export default function SpeakingPractice() {
     sendSessionUpdate,
   } = useRealtimeWebRTC();
 
+  const phase2UpdatedRef = useRef(false);
   const phase3UpdatedRef = useRef(false);
 
   const isConnected = connectionState === "connected";
@@ -351,15 +374,38 @@ export default function SpeakingPractice() {
     aiTranscriptsRef.current.push(text);
     conversationLogRef.current.push({ role: "teacher", text, ts: Date.now() });
 
-    // ── Phase 3 detection: keyword-based with high turn-count safety net ──
-    if (!phase3UpdatedRef.current && verbData) {
+    // ── Phase 2 detection: AI mentions transitioning to longer sentences ──
+    if (!phase2UpdatedRef.current && !phase3UpdatedRef.current && verbData) {
       const upper = text.toUpperCase();
       const aiCount = aiTranscriptsRef.current.length;
-      // Minimum turns before Phase 3 can trigger: SHORT_ROUNDS * ~4 turns + LONG_ROUNDS * ~4 turns = ~16
-      // Use a conservative minimum of 8 AI turns to prevent premature triggering
-      const minTurnsForPhase3 = 8;
+      const minTurnsForPhase2 = 4; // SHORT_ROUNDS * ~2 turns minimum
+      if (aiCount >= minTurnsForPhase2) {
+        const phase2Transition =
+          upper.includes("LONGER") ||
+          upper.includes("LONG SENTENCE") ||
+          upper.includes("LONGER ONE") ||
+          upper.includes("PHASE 2") ||
+          upper.includes("긴 문장");
+        const phase2Safety = aiCount >= 10; // safety fallback
+        if (phase2Transition || phase2Safety) {
+          console.log("[phase2] Detected Phase 2 transition at AI turn", aiCount, phase2Transition ? "(keyword)" : "(safety fallback)");
+          phase2UpdatedRef.current = true;
+          const phase2Instructions = buildPhase2Instructions(
+            verbData,
+            profile?.difficulty_level || "medium",
+            profile?.speech_speed || "medium",
+          );
+          sendSessionUpdate(phase2Instructions);
+        }
+      }
+    }
+
+    // ── Phase 3 detection: keyword-based with high turn-count safety net ──
+    if (!phase3UpdatedRef.current && phase2UpdatedRef.current && verbData) {
+      const upper = text.toUpperCase();
+      const aiCount = aiTranscriptsRef.current.length;
+      const minTurnsForPhase3 = 12; // Phase 1 (~5) + Phase 2 (~5) minimum
       if (aiCount >= minTurnsForPhase3) {
-        // Primary: AI explicitly mentions transition phrases (not just casual use of "situation/상황")
         const phase3TransitionPhrases =
           upper.includes("PHASE 3") ||
           upper.includes("FREE SITUATION") ||
@@ -370,8 +416,7 @@ export default function SpeakingPractice() {
           upper.includes("상황을 이야기할게") ||
           upper.includes("상황을 이야기 할게") ||
           (upper.includes("상황") && (upper.includes("시작") || upper.includes("첫")));
-        // Safety net: if AI somehow never says the keyword, force after 16 turns
-        const safetyFallback = aiCount >= 16;
+        const safetyFallback = aiCount >= 20;
         if (phase3TransitionPhrases || safetyFallback) {
           console.log("[phase3] Detected Phase 3 transition at AI turn", aiCount, phase3TransitionPhrases ? "(keyword)" : "(safety fallback)");
           phase3UpdatedRef.current = true;
@@ -381,7 +426,6 @@ export default function SpeakingPractice() {
             profile?.speech_speed || "medium",
           );
           sendSessionUpdate(phase3Instructions);
-          // Force Korean scaffolding start with a hidden nudge
           setTimeout(() => {
             sendUserText("Start Phase 3 now. Begin Step 1 entirely in Korean.", true);
           }, 500);
@@ -481,6 +525,7 @@ export default function SpeakingPractice() {
     aiTranscriptsRef.current = [];
     conversationLogRef.current = [];
     completionTriggeredRef.current = false;
+    phase2UpdatedRef.current = false;
     phase3UpdatedRef.current = false;
 
     // Check for previous paused session
@@ -496,7 +541,7 @@ export default function SpeakingPractice() {
     unlockAudio.pause();
     unlockAudio.src = "";
 
-    const instructions = buildSystemInstructions(
+    const instructions = buildPhase1Instructions(
       verbData,
       profile?.difficulty_level || "medium",
       profile?.speech_speed || "medium",
