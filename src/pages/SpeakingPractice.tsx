@@ -60,58 +60,21 @@ function HighlightedText({ text }: { text: string }) {
 
 // ── System instructions builder ──
 
-// Round counts per phase — easy to adjust later
-const SHORT_ROUNDS = 2;
-const LONG_ROUNDS = 2;
+// Situation round count
 const SITUATION_ROUNDS = 2;
 
-function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
-  // Only use short1/short2 and long1/long2 (skip 3)
-  const shortExamples = [verb.anchor_short_1, verb.anchor_short_2].filter(Boolean);
-  const longExamples = [verb.anchor_long_1, verb.anchor_long_2].filter(Boolean);
-
-  const shortList = shortExamples.map((e, i) => `  Short-${i + 1}: "${e}"`).join("\n");
-  const longList = longExamples.map((e, i) => `  Long-${i + 1}: "${e}"`).join("\n");
-
+/** Shared preamble for all phases */
+function buildPreamble(verb: VerbData, difficultyLevel: string, speechSpeed: string) {
   const ageMap: Record<string, string> = {
     low: "a 4-year-old", medium: "a 7-year-old", high: "a 10-year-old",
   };
   const age = ageMap[difficultyLevel] || ageMap["medium"];
   const maxSent = speechSpeed === "fast" ? "2-3" : "1-2";
+  return { age, maxSent };
+}
 
+function buildRulesBlock(): string {
   return [
-    `You are a fun, encouraging native-English-speaking friend tutoring a child (imagine ${age}). Keep every turn to ${maxSent} sentences MAX — rapid back-and-forth (tiki-taka).`,
-    `Use child-friendly topics (friends, animals, toys, food, family, school, playground, hobbies, sports). Avoid adult topics.`,
-    `TARGET VERB: "${verb.base_verb}"`,
-    "",
-    "── KOREAN RULE ──",
-    "After presenting each target sentence, explain in Korean: '이건 [Korean meaning] 이라는 뜻이야.'",
-    "If student seems confused, briefly explain in Korean. Never translate student's English into Korean.",
-    "",
-    "── TONE ──",
-    "Talk like a fun older friend. Never say: sentence, verb, correct, repeat, example, practice, mistake, error, response, translate, grammar, past tense.",
-    "Use natural alternatives: 'this one', 'say it again', 'listen to this', 'almost!', 'nice!', 'let's try'.",
-    "Praise ONLY as direct reaction to student speech, never as filler. Vary praise words.",
-    "When asking student to do something, use 'please', 'go ahead', 'let's try'. For imperative targets, soften with 'Please ~' or 'Can you ~?'.",
-    "",
-    "── PHASE 1: SHORT SENTENCES (do Short-1 then Short-2, in order) ──",
-    shortList,
-    "Each round: 1) Say target clearly → WAIT. 2) After repeat: praise + Korean meaning → ask to say it ONE MORE TIME → WAIT. 3) Fun situation, prompt to say it → WAIT. 4) React/correct, ask to say it once more → WAIT.",
-    "Round 1 (Short-1) only: after step 4, transform to ALL of these forms with Korean meaning for each: past tense, progressive (-ing), question. Ask student to say each form TWICE.",
-    "",
-    "── PHASE 2: LONG SENTENCES (do Long-1 then Long-2, in order) ──",
-    longList,
-    "Same flow as Phase 1 — student says each target TWICE per step. Round 1 (Long-1): tense variations (past, progressive, question) at end, each said TWICE.",
-    "After finishing Long-2, move to Phase 3.",
-    "",
-    "── PHASE 3: FREE SITUATIONS (" + SITUATION_ROUNDS + " rounds) ──",
-    `Student uses "${verb.base_verb}" in situations YOU create. NEVER give the answer before student tries.`,
-    "Step 1 (Korean only): Describe scenario in Korean. Ask '너라면 영어로 뭐라고 말할 것 같아?' WAIT.",
-    "Step 2 (English): Give hint (1-2 words), NOT full sentence. WAIT.",
-    "Step 3: Correct/polish. After 2 fails, model full sentence.",
-    "Step 4: Final repeat once. Praise, move on.",
-    'After ' + SITUATION_ROUNDS + ' situations, say "PRACTICE COMPLETE!"',
-    "",
     "── RULES ──",
     "• SILENCE: nothing heard → 'I didn't hear you — try it!' Never pretend they spoke.",
     "• PARTIAL: incomplete → 'Almost!' + model correct + retry.",
@@ -124,18 +87,80 @@ function buildSystemInstructions(verb: VerbData, difficultyLevel: string, speech
   ].join("\n");
 }
 
-/** Phase 3-only instructions — sent via session.update when Phase 3 is detected */
+function buildToneBlock(): string {
+  return [
+    "── TONE ──",
+    "Talk like a fun older friend. Never say: sentence, verb, correct, repeat, example, practice, mistake, error, response, translate, grammar, past tense.",
+    "Use natural alternatives: 'this one', 'say it again', 'listen to this', 'almost!', 'nice!', 'let's try'.",
+    "Praise ONLY as direct reaction to student speech, never as filler. Vary praise words.",
+    "When asking student to do something, use 'please', 'go ahead', 'let's try'. For imperative targets, soften with 'Please ~' or 'Can you ~?'.",
+  ].join("\n");
+}
+
+/** Phase 1 ONLY — initial instructions. AI sees only Short sentences. */
+function buildPhase1Instructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
+  const { age, maxSent } = buildPreamble(verb, difficultyLevel, speechSpeed);
+  const shortExamples = [verb.anchor_short_1, verb.anchor_short_2].filter(Boolean);
+  const shortList = shortExamples.map((e, i) => `  Short-${i + 1}: "${e}"`).join("\n");
+
+  return [
+    `You are a fun, encouraging native-English-speaking friend tutoring a child (imagine ${age}). Keep every turn to ${maxSent} sentences MAX — rapid back-and-forth (tiki-taka).`,
+    `Use child-friendly topics (friends, animals, toys, food, family, school, playground, hobbies, sports). Avoid adult topics.`,
+    `TARGET VERB: "${verb.base_verb}"`,
+    "",
+    "── KOREAN RULE ──",
+    "After presenting each target sentence, explain in Korean: '이건 [Korean meaning] 이라는 뜻이야.'",
+    "If student seems confused, briefly explain in Korean. Never translate student's English into Korean.",
+    "",
+    buildToneBlock(),
+    "",
+    "── YOUR TASK: SHORT SENTENCES (do Short-1 then Short-2, in order) ──",
+    shortList,
+    "Each round: 1) Say target clearly → WAIT. 2) After repeat: praise + Korean meaning → ask to say it ONE MORE TIME → WAIT. 3) Fun situation, prompt to say it → WAIT. 4) React/correct, ask to say it once more → WAIT.",
+    "Round 1 (Short-1) only: after step 4, transform to ALL of these forms with Korean meaning for each: past tense, progressive (-ing), question. Ask student to say each form TWICE.",
+    "",
+    'After finishing Short-2, say exactly "SHORT DONE" and stop. Do NOT continue to any other phase.',
+    "",
+    buildRulesBlock(),
+  ].join("\n");
+}
+
+/** Phase 2 ONLY — injected via session.update after SHORT DONE */
+function buildPhase2Instructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
+  const { age, maxSent } = buildPreamble(verb, difficultyLevel, speechSpeed);
+  const longExamples = [verb.anchor_long_1, verb.anchor_long_2].filter(Boolean);
+  const longList = longExamples.map((e, i) => `  Long-${i + 1}: "${e}"`).join("\n");
+
+  return [
+    `You are a fun, encouraging friend tutoring a child (imagine ${age}). Max ${maxSent} sentences per turn. Child-friendly topics only.`,
+    `You just finished teaching short sentences with "${verb.base_verb}". Now: LONG SENTENCES.`,
+    `TARGET VERB: "${verb.base_verb}"`,
+    "",
+    "── KOREAN RULE ──",
+    "After presenting each target sentence, explain in Korean: '이건 [Korean meaning] 이라는 뜻이야.'",
+    "If student seems confused, briefly explain in Korean.",
+    "",
+    buildToneBlock(),
+    "",
+    "── YOUR TASK: LONG SENTENCES (do Long-1 then Long-2, in order) ──",
+    longList,
+    "Each round: 1) Say target clearly → WAIT. 2) After repeat: praise + Korean meaning → ask to say it ONE MORE TIME → WAIT. 3) Fun situation, prompt to say it → WAIT. 4) React/correct, ask to say it once more → WAIT.",
+    "Student says each target TWICE per step.",
+    "Round 1 (Long-1) only: after step 4, transform to ALL forms with Korean meaning: past tense, progressive (-ing), question. Ask student to say each form TWICE.",
+    "",
+    'After finishing Long-2, say exactly "LONG DONE" and stop. Do NOT continue to any other phase.',
+    "",
+    buildRulesBlock(),
+  ].join("\n");
+}
+
+/** Phase 3 ONLY — injected via session.update after LONG DONE */
 function buildPhase3Instructions(verb: VerbData, difficultyLevel: string, speechSpeed: string): string {
+  const { age, maxSent } = buildPreamble(verb, difficultyLevel, speechSpeed);
   const situations = [verb.situation_seed_1, verb.situation_seed_2, verb.situation_seed_3, verb.situation_seed_4].filter(Boolean);
   const sitList = situations.map((s, i) => `  Situation-${i + 1}: ${s}`).join("\n");
   const learned = [verb.anchor_short_1, verb.anchor_short_2, verb.anchor_long_1, verb.anchor_long_2]
     .filter(Boolean).map((e, i) => `  ${i + 1}. "${e}"`).join("\n");
-
-  const ageMap: Record<string, string> = {
-    low: "a 4-year-old", medium: "a 7-year-old", high: "a 10-year-old",
-  };
-  const age = ageMap[difficultyLevel] || ageMap["medium"];
-  const maxSent = speechSpeed === "fast" ? "2-3" : "1-2";
 
   return [
     `You are a fun, encouraging friend tutoring a child (imagine ${age}). Max ${maxSent} sentences per turn. Child-friendly topics only.`,
@@ -215,6 +240,7 @@ export default function SpeakingPractice() {
     sendSessionUpdate,
   } = useRealtimeWebRTC();
 
+  const phase2UpdatedRef = useRef(false);
   const phase3UpdatedRef = useRef(false);
 
   const isConnected = connectionState === "connected";
@@ -351,21 +377,28 @@ export default function SpeakingPractice() {
     aiTranscriptsRef.current.push(text);
     conversationLogRef.current.push({ role: "teacher", text, ts: Date.now() });
 
-    // ── Phase 3 detection: keyword-only (no turn count condition) ──
-    if (!phase3UpdatedRef.current && verbData) {
+    // ── Phase transition detection: SHORT DONE → Phase 2, LONG DONE → Phase 3 ──
+    if (verbData) {
       const upper = text.toUpperCase();
-      const phase3TransitionPhrases =
-        upper.includes("PHASE 3") ||
-        upper.includes("FREE SITUATION") ||
-        upper.includes("MOVE ON TO SITUATION") ||
-        upper.includes("LET'S TRY SOME SITUATION") ||
-        upper.includes("NOW LET'S DO SITUATION") ||
-        upper.includes("첫 번째 상황") ||
-        upper.includes("상황을 이야기할게") ||
-        upper.includes("상황을 이야기 할게") ||
-        (upper.includes("상황") && (upper.includes("시작") || upper.includes("첫")));
-      if (phase3TransitionPhrases) {
-        console.log("[phase3] Detected Phase 3 transition at AI turn", aiTranscriptsRef.current.length, "(keyword)");
+
+      // SHORT DONE → inject Phase 2
+      if (!phase2UpdatedRef.current && upper.includes("SHORT DONE")) {
+        console.log("[phase2] Detected SHORT DONE at AI turn", aiTranscriptsRef.current.length);
+        phase2UpdatedRef.current = true;
+        const phase2Instructions = buildPhase2Instructions(
+          verbData,
+          profile?.difficulty_level || "medium",
+          profile?.speech_speed || "medium",
+        );
+        sendSessionUpdate(phase2Instructions);
+        setTimeout(() => {
+          sendUserText("Great! Now start Long Sentences. Begin with Long-1.", true);
+        }, 500);
+      }
+
+      // LONG DONE → inject Phase 3
+      if (!phase3UpdatedRef.current && phase2UpdatedRef.current && upper.includes("LONG DONE")) {
+        console.log("[phase3] Detected LONG DONE at AI turn", aiTranscriptsRef.current.length);
         phase3UpdatedRef.current = true;
         const phase3Instructions = buildPhase3Instructions(
           verbData,
@@ -387,7 +420,7 @@ export default function SpeakingPractice() {
     }
     // Primary detection (case-insensitive)
     checkForCompletion(text);
-  }, [addCorrection, checkForCompletion, verbData, profile, sendSessionUpdate]);
+  }, [addCorrection, checkForCompletion, verbData, profile, sendSessionUpdate, sendUserText]);
 
   const handleUserTranscript = useCallback((text: string) => {
     totalAudioSecondsRef.current += 5;
@@ -471,6 +504,7 @@ export default function SpeakingPractice() {
     aiTranscriptsRef.current = [];
     conversationLogRef.current = [];
     completionTriggeredRef.current = false;
+    phase2UpdatedRef.current = false;
     phase3UpdatedRef.current = false;
 
     // Check for previous paused session
@@ -486,7 +520,7 @@ export default function SpeakingPractice() {
     unlockAudio.pause();
     unlockAudio.src = "";
 
-    const instructions = buildSystemInstructions(
+    const instructions = buildPhase1Instructions(
       verbData,
       profile?.difficulty_level || "medium",
       profile?.speech_speed || "medium",
