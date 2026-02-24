@@ -23,18 +23,15 @@ type Session = {
 
 // ── Text processing helpers ──
 
-/** Strip non-Latin characters, keeping only English letters, digits, punctuation, spaces */
 function stripNonEnglish(text: string): string {
   return text.replace(/[ㄱ-ㅎㅏ-ㅣ가-힣\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u3400-\u4DBF\u0400-\u04FF\u0600-\u06FF\u0E00-\u0E7F\u0900-\u097F]+/g, "").replace(/\s+/g, " ").trim();
 }
 
-/** Returns true if text has meaningful English content */
 function hasMeaningfulEnglish(text: string): boolean {
   const latinChars = (text.match(/[a-zA-Z]/g) || []).length;
   return latinChars >= 2 && latinChars / Math.max(text.length, 1) > 0.3;
 }
 
-/** Normalize text for dedup comparison */
 function normalizeForCompare(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
 }
@@ -46,22 +43,20 @@ type ReportEntry =
   | { type: "student"; text: string }
   | { type: "separator"; text: string };
 
-/** Extract [TARGET] sentences and Korean meanings from teacher turns,
- *  and meaningful English from student turns */
+/** Process conversation log chronologically, extracting [TARGET] from teacher turns
+ *  and meaningful English from student turns, in original order */
 function processConversationLog(log: ConversationEntry[]): ReportEntry[] {
   const result: ReportEntry[] = [];
   const seenTargets = new Set<string>();
 
-  for (let i = 0; i < log.length; i++) {
-    const entry = log[i];
-
+  for (const entry of log) {
     if (entry.role === "system" && entry.text.includes("Session Resumed")) {
       result.push({ type: "separator", text: "--- Session Resumed ---" });
       continue;
     }
 
     if (entry.role === "teacher") {
-      // Extract all [TARGET] sentences from this teacher turn
+      // Extract [TARGET] sentences from this teacher turn
       const targetMatches = entry.text.match(/\[TARGET\]\s*([^[]*?)(?=\[TARGET\]|$)/g);
       if (targetMatches) {
         for (const match of targetMatches) {
@@ -71,19 +66,18 @@ function processConversationLog(log: ConversationEntry[]): ReportEntry[] {
           if (seenTargets.has(norm)) continue;
           seenTargets.add(norm);
 
-          // Look for Korean meaning nearby: '이건 ... 이라는 뜻이야' pattern
           const koreanMatch = entry.text.match(/이건\s+(.+?)\s*(이라는\s*뜻이야|라는\s*뜻이야)/);
           const korean = koreanMatch ? koreanMatch[1].trim() : null;
-
           result.push({ type: "target", english, korean });
         }
       }
+      // Skip teacher turns with no [TARGET] — they are instructions/praise/corrections
       continue;
     }
 
     if (entry.role === "student") {
       const cleaned = stripNonEnglish(entry.text);
-      if (!hasMeaningfulEnglish(cleaned)) continue;
+      if (!hasMeaningfulEnglish(cleaned)) continue; // Skip non-English speech entirely
       result.push({ type: "student", text: cleaned });
     }
   }
@@ -98,7 +92,6 @@ function buildFallbackEntries(
   const result: ReportEntry[] = [];
   const seenTargets = new Set<string>();
 
-  // Extract [TARGET] from AI transcripts
   for (const text of (aiTranscripts || [])) {
     const targetMatches = text.match(/\[TARGET\]\s*([^[]*?)(?=\[TARGET\]|$)/g);
     if (targetMatches) {
@@ -114,7 +107,6 @@ function buildFallbackEntries(
     }
   }
 
-  // Student English only
   for (const text of (studentTranscripts || [])) {
     const cleaned = stripNonEnglish(text);
     if (hasMeaningfulEnglish(cleaned)) {
@@ -222,12 +214,8 @@ export default function TranscriptReport({
                 ? processConversationLog(s.conversation_log)
                 : buildFallbackEntries(s.student_transcripts, s.ai_transcripts);
 
-              // Separate targets and student lines
-              const targets = entries.filter((e): e is Extract<ReportEntry, { type: "target" }> => e.type === "target");
-              const studentLines = entries.filter((e): e is Extract<ReportEntry, { type: "student" }> => e.type === "student");
-
               return (
-                <div key={s.id} className="rounded-xl border p-3 space-y-3">
+                <div key={s.id} className="rounded-xl border p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-bold">Session {sessions.length - idx}</span>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -236,35 +224,34 @@ export default function TranscriptReport({
                     </div>
                   </div>
 
-                  {targets.length === 0 && studentLines.length === 0 ? (
+                  {entries.length === 0 ? (
                     <p className="text-sm text-muted-foreground italic">No transcripts recorded</p>
                   ) : (
-                    <>
-                      {/* Target Sentences */}
-                      {targets.length > 0 && (
-                        <div className="space-y-1">
-                          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">📚 Target Sentences</div>
-                          {targets.map((t, i) => (
+                    <div className="space-y-1.5">
+                      {entries.map((e, i) => {
+                        if (e.type === "separator") {
+                          return <div key={i} className="text-xs text-muted-foreground text-center py-1 italic">{e.text}</div>;
+                        }
+                        if (e.type === "target") {
+                          return (
                             <div key={i} className="bg-primary/10 rounded-lg px-3 py-1.5">
-                              <div className="text-sm font-semibold text-primary">{t.english}</div>
-                              {t.korean && <div className="text-xs text-muted-foreground mt-0.5">{t.korean}</div>}
+                              <div className="text-xs text-muted-foreground font-semibold">📚 Target</div>
+                              <div className="text-sm font-semibold text-primary">{e.english}</div>
+                              {e.korean && <div className="text-xs text-muted-foreground mt-0.5">{e.korean}</div>}
                             </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Student Speech */}
-                      {studentLines.length > 0 && (
-                        <div className="space-y-1">
-                          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">🗣️ Student Speech</div>
-                          {studentLines.map((s, i) => (
-                            <div key={i} className="text-sm bg-muted/50 rounded-lg px-3 py-1.5">
-                              {s.text}
+                          );
+                        }
+                        if (e.type === "student") {
+                          return (
+                            <div key={i} className="bg-muted/50 rounded-lg px-3 py-1.5">
+                              <div className="text-xs text-muted-foreground font-semibold">🗣️ Student</div>
+                              <div className="text-sm">{e.text}</div>
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
+                          );
+                        }
+                        return null;
+                      })}
+                    </div>
                   )}
                 </div>
               );
