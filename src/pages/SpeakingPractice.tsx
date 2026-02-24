@@ -61,7 +61,7 @@ function HighlightedText({ text }: { text: string }) {
 // ── System instructions builder ──
 
 // Situation round count
-const SITUATION_ROUNDS = 2;
+const SITUATION_ROUNDS = 1;
 
 /** Shared preamble for all phases */
 function buildPreamble(verb: VerbData, difficultyLevel: string, speechSpeed: string) {
@@ -141,16 +141,18 @@ function buildPhase1Instructions(verb: VerbData, difficultyLevel: string, speech
     "NO SITUATION SETUP. Do NOT create imaginary scenarios or situations. Just present the sentence directly and have the student repeat it.",
     "",
     "Each round:",
-    "1) Say the target sentence clearly → WAIT for student to repeat.",
-    "2) After repeat: praise + Korean meaning → ask to say it ONE MORE TIME → WAIT.",
-    "3) Apply CORRECTION PROTOCOL if needed → WAIT.",
+    "1) Say the target sentence clearly.",
+    "2) Immediately explain its meaning in Korean: '이건 [Korean meaning] 이라는 뜻이야.'",
+    "3) Say the target sentence again → WAIT for student to repeat.",
+    "4) Apply CORRECTION PROTOCOL if needed → then ask to say it ONE MORE TIME → WAIT.",
+    "5) When repeating the same sentence again, do NOT repeat the Korean explanation.",
     "",
     "TENSE VARIATIONS (both Short-1 and Short-2):",
     "After the student has practiced the base sentence, transform it into these forms:",
     "- Past tense",
     "- Question form",
     `- Progressive (-ing) — ONLY if it makes natural sense for the verb "${verb.base_verb}". If the verb does not naturally take progressive form (e.g. stative verbs like 'know', 'have', 'like'), SKIP progressive.`,
-    "For each tense form: say it clearly with Korean meaning → student repeats TWICE.",
+    "For each tense form: say it clearly → Korean meaning → say it again → student repeats TWICE. Do NOT repeat Korean meaning on the second repeat.",
     "",
     'After finishing ALL tense variations for Short-2, say a natural transition like "OK, now let\'s try some longer ones!" and then output the marker SHORT DONE on its own.',
     "",
@@ -183,12 +185,18 @@ function buildPhase2Instructions(verb: VerbData, difficultyLevel: string, speech
     longList,
     "",
     "NO SITUATION SETUP. Do NOT create imaginary scenarios or situations. Just present the sentence directly.",
-    "NO TENSE VARIATIONS. Do NOT transform into past/question/progressive forms. Just practice the sentences as-is.",
+    "",
+    "TENSE VARIATION for Long-1 ONLY:",
+    "After the student has practiced the base Long-1 sentence, also practice the QUESTION FORM of Long-1.",
+    "For the question form: say it clearly → Korean meaning → say it again → student repeats TWICE.",
+    "Do NOT do any tense variations for Long-2. Just practice Long-2 as-is.",
     "",
     "Each round:",
-    "1) Say the target sentence clearly → WAIT for student to repeat.",
-    "2) After repeat: praise + Korean meaning → ask to say it ONE MORE TIME → WAIT.",
-    "3) Apply CORRECTION PROTOCOL if needed → WAIT.",
+    "1) Say the target sentence clearly.",
+    "2) Immediately explain its meaning in Korean: '이건 [Korean meaning] 이라는 뜻이야.'",
+    "3) Say the target sentence again → WAIT for student to repeat.",
+    "4) Apply CORRECTION PROTOCOL if needed → then ask to say it ONE MORE TIME → WAIT.",
+    "5) When repeating the same sentence again, do NOT repeat the Korean explanation.",
     "",
     'After finishing Long-2, say a natural transition like "Now let\'s try a fun situation!" and then output the marker LONG DONE on its own.',
     "",
@@ -206,7 +214,7 @@ function buildPhase3Instructions(verb: VerbData, difficultyLevel: string, speech
 
   return [
     `You are a fun, encouraging friend tutoring a child (imagine ${age}). Max ${maxSent} sentences per turn. Child-friendly topics only.`,
-    `You just finished teaching "${verb.base_verb}". Now: PHASE 3 — FREE SITUATIONS (2 rounds).`,
+    `You just finished teaching "${verb.base_verb}". Now: PHASE 3 — FREE SITUATION (1 round only).`,
     "",
     "Situation seeds:", sitList,
     "Learned sentences:", learned,
@@ -227,8 +235,8 @@ function buildPhase3Instructions(verb: VerbData, difficultyLevel: string, speech
     `STEP 2 (English): Acknowledge what they said + give a hint using "${verb.base_verb}" (1-2 words, NOT the full sentence). WAIT for student to try.`,
     "STEP 3: Listen to student's attempt. Correct and polish into a complete sentence. Give Korean meaning. Then say: 'Now say it after me!' and model the complete sentence. WAIT.",
     "STEP 4: Student repeats. Apply CORRECTION PROTOCOL if needed. Then ask them to say it ONE MORE TIME. WAIT.",
-    "STEP 5: Student repeats again. Praise and move to next round.",
-    'After 2 rounds, say "PRACTICE COMPLETE!"',
+    "STEP 5: Student repeats again. Praise briefly in English.",
+    'Then say "Great job today! PRACTICE COMPLETE!" in English. Do NOT say completion in Korean.',
     "",
     "── RULES ──",
     "• Step 1 = Korean only. Steps 2-5 = English only (except Korean meaning explanation).",
