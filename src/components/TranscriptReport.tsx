@@ -21,102 +21,89 @@ type Session = {
   conversation_log: ConversationEntry[] | null;
 };
 
-// ── Text processing helpers ──
-
-function stripNonEnglish(text: string): string {
-  return text.replace(/[ㄱ-ㅎㅏ-ㅣ가-힣\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u3400-\u4DBF\u0400-\u04FF\u0600-\u06FF\u0E00-\u0E7F\u0900-\u097F]+/g, "").replace(/\s+/g, " ").trim();
+// Returns true if the text contains only Latin/English characters (no Korean, Japanese, Chinese, etc.)
+function isEnglish(text: string): boolean {
+  // Filter out Korean, Japanese (Hiragana, Katakana, Kanji), Chinese, Cyrillic, Arabic, Thai, Devanagari
+  return !/[ㄱ-ㅎㅏ-ㅣ가-힣\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\u3400-\u4DBF\u0400-\u04FF\u0600-\u06FF\u0E00-\u0E7F\u0900-\u097F]/.test(text);
 }
 
-function hasMeaningfulEnglish(text: string): boolean {
-  const latinChars = (text.match(/[a-zA-Z]/g) || []).length;
-  return latinChars >= 2 && latinChars / Math.max(text.length, 1) > 0.3;
+/** Extract quoted target sentences from AI text */
+function extractTargetSentences(text: string): string[] {
+  const matches = text.match(/"([^"]+)"/g);
+  return matches ? matches.map(m => m.replace(/"/g, "")) : [];
 }
 
-function normalizeForCompare(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+/** Check if teacher text is just echoing the student's previous utterance */
+function isEcho(teacherText: string, studentText: string): boolean {
+  if (!studentText) return false;
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+  const tNorm = normalize(teacherText);
+  const sNorm = normalize(studentText);
+  // If teacher text contains the student text almost verbatim
+  return tNorm.includes(sNorm) && sNorm.length > 5;
 }
 
-// ── Report entry types ──
-
-type ReportEntry =
-  | { type: "target"; english: string; korean: string | null }
-  | { type: "student"; text: string }
-  | { type: "separator"; text: string };
-
-/** Process conversation log chronologically, extracting [TARGET] from teacher turns
- *  and meaningful English from student turns, in original order */
-function processConversationLog(log: ConversationEntry[]): ReportEntry[] {
-  const result: ReportEntry[] = [];
-  const seenTargets = new Set<string>();
+/** Process conversation_log into display entries */
+function processConversationLog(log: ConversationEntry[]): { role: "teacher" | "student" | "separator"; text: string }[] {
+  const result: { role: "teacher" | "student" | "separator"; text: string }[] = [];
+  const seenTeacherTargets = new Set<string>();
+  let lastStudentText = "";
 
   for (const entry of log) {
+    // Handle session resume separator
     if (entry.role === "system" && entry.text.includes("Session Resumed")) {
-      result.push({ type: "separator", text: "--- Session Resumed ---" });
-      continue;
-    }
-
-    if (entry.role === "teacher") {
-      // Extract [TARGET] sentences from this teacher turn
-      const targetMatches = entry.text.match(/\[TARGET\]\s*([^[]*?)(?=\[TARGET\]|$)/g);
-      if (targetMatches) {
-        for (const match of targetMatches) {
-          const english = match.replace(/\[TARGET\]\s*/, "").trim();
-          if (!english) continue;
-          const norm = normalizeForCompare(english);
-          if (seenTargets.has(norm)) continue;
-          seenTargets.add(norm);
-
-          const koreanMatch = entry.text.match(/이건\s+(.+?)\s*(이라는\s*뜻이야|라는\s*뜻이야)/);
-          const korean = koreanMatch ? koreanMatch[1].trim() : null;
-          result.push({ type: "target", english, korean });
-        }
-      }
-      // Skip teacher turns with no [TARGET] — they are instructions/praise/corrections
+      result.push({ role: "separator", text: "--- Session Resumed ---" });
       continue;
     }
 
     if (entry.role === "student") {
-      const cleaned = stripNonEnglish(entry.text);
-      if (!hasMeaningfulEnglish(cleaned)) continue; // Skip non-English speech entirely
-      result.push({ type: "student", text: cleaned });
-    }
-  }
-  return result;
-}
-
-/** Fallback for old sessions without conversation_log */
-function buildFallbackEntries(
-  studentTranscripts: string[] | null,
-  aiTranscripts: string[] | null
-): ReportEntry[] {
-  const result: ReportEntry[] = [];
-  const seenTargets = new Set<string>();
-
-  for (const text of (aiTranscripts || [])) {
-    const targetMatches = text.match(/\[TARGET\]\s*([^[]*?)(?=\[TARGET\]|$)/g);
-    if (targetMatches) {
-      for (const match of targetMatches) {
-        const english = match.replace(/\[TARGET\]\s*/, "").trim();
-        if (!english) continue;
-        const norm = normalizeForCompare(english);
-        if (seenTargets.has(norm)) continue;
-        seenTargets.add(norm);
-        const koreanMatch = text.match(/이건\s+(.+?)\s*(이라는\s*뜻이야|라는\s*뜻이야)/);
-        result.push({ type: "target", english, korean: koreanMatch ? koreanMatch[1].trim() : null });
+      if (!isEnglish(entry.text)) continue;
+      result.push({ role: "student", text: entry.text });
+      lastStudentText = entry.text;
+    } else if (entry.role === "teacher") {
+      // Extract target sentences only
+      const targets = extractTargetSentences(entry.text);
+      for (const target of targets) {
+        const key = target.toLowerCase().trim();
+        // Skip duplicates
+        if (seenTeacherTargets.has(key)) continue;
+        // Skip if it's just echoing what student said
+        if (isEcho(target, lastStudentText)) continue;
+        seenTeacherTargets.add(key);
+        result.push({ role: "teacher", text: target });
       }
     }
   }
+  return result;
+}
 
-  for (const text of (studentTranscripts || [])) {
-    const cleaned = stripNonEnglish(text);
-    if (hasMeaningfulEnglish(cleaned)) {
-      result.push({ type: "student", text: cleaned });
+/** Fallback: build interleaved view from separate arrays (old sessions) */
+function buildFallbackEntries(
+  studentTranscripts: string[] | null,
+  aiTranscripts: string[] | null
+): { role: "teacher" | "student" | "separator"; text: string }[] {
+  const result: { role: "teacher" | "student" | "separator"; text: string }[] = [];
+  const seenTeacherTargets = new Set<string>();
+  const studentLines = (studentTranscripts || []).filter(isEnglish);
+  const aiLines = aiTranscripts || [];
+
+  const maxLen = Math.max(aiLines.length, studentLines.length);
+  for (let i = 0; i < maxLen; i++) {
+    if (i < aiLines.length) {
+      const targets = extractTargetSentences(aiLines[i]);
+      for (const target of targets) {
+        const key = target.toLowerCase().trim();
+        if (seenTeacherTargets.has(key)) continue;
+        seenTeacherTargets.add(key);
+        result.push({ role: "teacher", text: target });
+      }
+    }
+    if (i < studentLines.length) {
+      result.push({ role: "student", text: studentLines[i] });
     }
   }
   return result;
 }
-
-// ── Component ──
 
 type TranscriptReportProps = {
   open: boolean;
@@ -155,7 +142,7 @@ export default function TranscriptReport({
   };
 
   const downloadExcel = () => {
-    const rows: { Student: string; Task: string; Date: string; Duration: string; Type: string; English: string; Korean: string }[] = [];
+    const rows: { Student: string; Task: string; Date: string; Duration: string; Role: string; Transcript: string }[] = [];
     for (const s of sessions) {
       const date = new Date(s.created_at).toLocaleString();
       const duration = `${Math.floor(s.duration_seconds / 60)}m ${s.duration_seconds % 60}s`;
@@ -164,14 +151,17 @@ export default function TranscriptReport({
         : buildFallbackEntries(s.student_transcripts, s.ai_transcripts);
 
       if (entries.length === 0) {
-        rows.push({ Student: studentName || "", Task: taskLabel || "", Date: date, Duration: duration, Type: "", English: "(no transcript)", Korean: "" });
+        rows.push({ Student: studentName || "", Task: taskLabel || "", Date: date, Duration: duration, Role: "", Transcript: "(no transcript)" });
       }
       for (const e of entries) {
-        if (e.type === "target") {
-          rows.push({ Student: studentName || "", Task: taskLabel || "", Date: date, Duration: duration, Type: "Target Sentence", English: e.english, Korean: e.korean || "" });
-        } else if (e.type === "student") {
-          rows.push({ Student: studentName || "", Task: taskLabel || "", Date: date, Duration: duration, Type: "Student", English: e.text, Korean: "" });
-        }
+        rows.push({
+          Student: studentName || "",
+          Task: taskLabel || "",
+          Date: date,
+          Duration: duration,
+          Role: e.role === "separator" ? "---" : e.role === "teacher" ? "Teacher" : "Student",
+          Transcript: e.text,
+        });
       }
     }
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -223,34 +213,29 @@ export default function TranscriptReport({
                       <Badge variant="outline" className="rounded-full text-[10px]">{duration}</Badge>
                     </div>
                   </div>
-
                   {entries.length === 0 ? (
                     <p className="text-sm text-muted-foreground italic">No transcripts recorded</p>
                   ) : (
-                    <div className="space-y-1.5">
-                      {entries.map((e, i) => {
-                        if (e.type === "separator") {
-                          return <div key={i} className="text-xs text-muted-foreground text-center py-1 italic">{e.text}</div>;
-                        }
-                        if (e.type === "target") {
-                          return (
-                            <div key={i} className="bg-primary/10 rounded-lg px-3 py-1.5">
-                              <div className="text-xs text-muted-foreground font-semibold">📚 Target</div>
-                              <div className="text-sm font-semibold text-primary">{e.english}</div>
-                              {e.korean && <div className="text-xs text-muted-foreground mt-0.5">{e.korean}</div>}
-                            </div>
-                          );
-                        }
-                        if (e.type === "student") {
-                          return (
-                            <div key={i} className="bg-muted/50 rounded-lg px-3 py-1.5">
-                              <div className="text-xs text-muted-foreground font-semibold">🗣️ Student</div>
-                              <div className="text-sm">{e.text}</div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })}
+                    <div className="space-y-1">
+                      {entries.map((e, i) =>
+                        e.role === "separator" ? (
+                          <div key={i} className="flex items-center gap-2 py-2">
+                            <div className="flex-1 h-px bg-border" />
+                            <span className="text-xs text-muted-foreground font-semibold whitespace-nowrap">🔄 Session Resumed</span>
+                            <div className="flex-1 h-px bg-border" />
+                          </div>
+                        ) : e.role === "teacher" ? (
+                          <div key={i} className="text-sm bg-primary/10 rounded-lg px-3 py-1.5">
+                            <span className="text-primary font-bold mr-1">🤖 (teacher)</span>
+                            <span className="text-primary font-semibold">{e.text}</span>
+                          </div>
+                        ) : (
+                          <div key={i} className="text-sm bg-muted/50 rounded-lg px-3 py-1.5">
+                            <span className="font-semibold mr-1">🗣️</span>
+                            {e.text}
+                          </div>
+                        )
+                      )}
                     </div>
                   )}
                 </div>
