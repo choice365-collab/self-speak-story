@@ -463,23 +463,37 @@ export default function SpeakingPractice() {
     if (!phase3UpdatedRef.current && verbData) {
       const upper = text.toUpperCase();
       const aiCount = aiTranscriptsRef.current.length;
-      // Primary: AI explicitly mentions transition to situations
-      const phase3Keywords = upper.includes("SITUATION") || upper.includes("PHASE 3") || upper.includes("상황");
-      // Safety net: if AI somehow never says the keyword, force after 12 turns
-      const safetyFallback = aiCount >= 12;
-      if (phase3Keywords || safetyFallback) {
-        console.log("[phase3] Detected Phase 3 transition at AI turn", aiCount, phase3Keywords ? "(keyword)" : "(safety fallback)");
-        phase3UpdatedRef.current = true;
-        const phase3Instructions = buildPhase3Instructions(
-          verbData,
-          profile?.difficulty_level || "medium",
-          profile?.speech_speed || "medium",
-        );
-        sendSessionUpdate(phase3Instructions);
-        // Force Korean scaffolding start with a hidden nudge
-        setTimeout(() => {
-          sendUserText("Start Phase 3 now. Begin Step 1 entirely in Korean.", true);
-        }, 500);
+      // Minimum turns before Phase 3 can trigger: SHORT_ROUNDS * ~4 turns + LONG_ROUNDS * ~4 turns = ~16
+      // Use a conservative minimum of 8 AI turns to prevent premature triggering
+      const minTurnsForPhase3 = 8;
+      if (aiCount >= minTurnsForPhase3) {
+        // Primary: AI explicitly mentions transition phrases (not just casual use of "situation/상황")
+        const phase3TransitionPhrases =
+          upper.includes("PHASE 3") ||
+          upper.includes("FREE SITUATION") ||
+          upper.includes("MOVE ON TO SITUATION") ||
+          upper.includes("LET'S TRY SOME SITUATION") ||
+          upper.includes("NOW LET'S DO SITUATION") ||
+          upper.includes("첫 번째 상황") ||
+          upper.includes("상황을 이야기할게") ||
+          upper.includes("상황을 이야기 할게") ||
+          (upper.includes("상황") && (upper.includes("시작") || upper.includes("첫")));
+        // Safety net: if AI somehow never says the keyword, force after 16 turns
+        const safetyFallback = aiCount >= 16;
+        if (phase3TransitionPhrases || safetyFallback) {
+          console.log("[phase3] Detected Phase 3 transition at AI turn", aiCount, phase3TransitionPhrases ? "(keyword)" : "(safety fallback)");
+          phase3UpdatedRef.current = true;
+          const phase3Instructions = buildPhase3Instructions(
+            verbData,
+            profile?.difficulty_level || "medium",
+            profile?.speech_speed || "medium",
+          );
+          sendSessionUpdate(phase3Instructions);
+          // Force Korean scaffolding start with a hidden nudge
+          setTimeout(() => {
+            sendUserText("Start Phase 3 now. Begin Step 1 entirely in Korean.", true);
+          }, 500);
+        }
       }
     }
 
