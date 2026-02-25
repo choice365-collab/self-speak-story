@@ -282,7 +282,7 @@ export default function SpeakingPractice() {
   const aiTranscriptsRef = useRef<string[]>([]);
   const conversationLogRef = useRef<{ role: string; text: string; ts: number }[]>([]);
   const currentSessionIdRef = useRef<string | null>(null);
-  const previousConversationLogRef = useRef<{ role: string; text: string; ts: number }[]>([]);
+  
   const firstDeltaTimeRef = useRef(0);
   const [aiStreamActive, setAiStreamActive] = useState(false);
   const aiStreamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -493,62 +493,21 @@ export default function SpeakingPractice() {
     }
   }, [sendUserText]);
 
-  // ── Save session on stop (for resume later) ──
+  // ── Save session on stop (partial, not for resume) ──
   const savePartialSession = useCallback(async () => {
     if (!user || !assignmentId) return;
     const totalSessionSeconds = Math.floor((Date.now() - sessionStartRef.current) / 1000);
     await updateDailyUsage(totalAudioSecondsRef.current);
 
-    if (currentSessionIdRef.current) {
-      // Update existing session
-      await supabase.from("speaking_sessions").update({
-        duration_seconds: totalSessionSeconds,
-        student_transcripts: userTranscriptsRef.current,
-        ai_transcripts: aiTranscriptsRef.current,
-        conversation_log: conversationLogRef.current,
-        session_state: { status: "paused" },
-      } as any).eq("id", currentSessionIdRef.current);
-    } else {
-      // Insert new partial session
-      const { data } = await supabase.from("speaking_sessions").insert({
-        student_id: user.id,
-        assignment_id: assignmentId,
-        duration_seconds: totalSessionSeconds,
-        student_transcripts: userTranscriptsRef.current,
-        ai_transcripts: aiTranscriptsRef.current,
-        conversation_log: conversationLogRef.current,
-        session_state: { status: "paused" },
-      } as any).select("id").single();
-      if (data) currentSessionIdRef.current = (data as any).id;
-    }
-  }, [user, assignmentId]);
-
-  // ── Load previous paused session for resume ──
-  const loadPreviousSession = useCallback(async (): Promise<string | null> => {
-    if (!user || !assignmentId) return null;
-    const { data } = await supabase
-      .from("speaking_sessions")
-      .select("id, conversation_log, session_state")
-      .eq("assignment_id", assignmentId)
-      .eq("student_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (!data) return null;
-    const state = (data as any).session_state;
-    if (!state || state.status !== "paused") return null;
-
-    const log = (data as any).conversation_log as { role: string; text: string; ts: number }[] | null;
-    if (!log || log.length === 0) return null;
-
-    // Save previous log for merging in report
-    previousConversationLogRef.current = log;
-    currentSessionIdRef.current = data.id;
-
-    // Find last teacher utterance
-    const lastTeacher = [...log].reverse().find(e => e.role === "teacher");
-    return lastTeacher?.text || null;
+    await supabase.from("speaking_sessions").insert({
+      student_id: user.id,
+      assignment_id: assignmentId,
+      duration_seconds: totalSessionSeconds,
+      student_transcripts: userTranscriptsRef.current,
+      ai_transcripts: aiTranscriptsRef.current,
+      conversation_log: conversationLogRef.current,
+      session_state: { status: "stopped" },
+    } as any);
   }, [user, assignmentId]);
 
   // ── Actions ──
@@ -566,9 +525,7 @@ export default function SpeakingPractice() {
     completionTriggeredRef.current = false;
     phase2UpdatedRef.current = false;
     phase3UpdatedRef.current = false;
-
-    // Check for previous paused session
-    const lastTeacherText = await loadPreviousSession();
+    currentSessionIdRef.current = null;
 
     // ── Audio unlock BEFORE any async work ──
     const unlockAudio = document.createElement("audio");
@@ -586,17 +543,8 @@ export default function SpeakingPractice() {
       profile?.speech_speed || "medium",
     );
 
-    // Build resume context if we have a previous session
-    let resumeInstructions = instructions;
-    if (lastTeacherText && previousConversationLogRef.current.length > 0) {
-      // Get last few exchanges for context
-      const recentLog = previousConversationLogRef.current.slice(-6);
-      const contextSummary = recentLog.map(e => `${e.role === "teacher" ? "Teacher" : "Student"}: ${e.text}`).join("\n");
-      resumeInstructions = instructions + "\n\n═══ RESUME CONTEXT ═══\nThis is a RESUMED session. The student stopped the previous session mid-lesson. Here is what happened in the previous session (last few exchanges):\n" + contextSummary + "\n\nIMPORTANT: Start by briefly welcoming the student back, then repeat what you were last saying. Continue the lesson from exactly where you left off. Do NOT restart from Phase 1.";
-    }
-
     await connect({
-      instructions: resumeInstructions,
+      instructions,
       voice: ["alloy", "ash", "echo", "shimmer"][Math.floor(Math.random() * 4)],
       preUnlockedAudio: unlockAudio,
       turnDetection: { type: "server_vad", threshold: 0.75, prefix_padding_ms: 400, silence_duration_ms: 1000 },
@@ -618,16 +566,12 @@ export default function SpeakingPractice() {
         }
       },
       onReady: (_send) => {
-        if (lastTeacherText) {
-          _send("Resume the lesson. Welcome the student back and continue from where we left off.");
-        } else {
-          _send("Start the lesson now.");
-        }
+        _send("Start the lesson now.");
       },
     });
 
     sessionStartRef.current = Date.now();
-  }, [verbData, profile, connect, handleAiTextDelta, handleAiTranscriptDone, handleUserTranscript, setMicEnabled, loadPreviousSession]);
+  }, [verbData, profile, connect, handleAiTextDelta, handleAiTranscriptDone, handleUserTranscript, setMicEnabled]);
 
   const toggleMute = useCallback(() => {
     if (teacherActive) return;
@@ -648,35 +592,16 @@ export default function SpeakingPractice() {
     const newCount = ((currentAssignment as any)?.completed_count || 0) + 1;
     await supabase.from("assignments").update({ status: "completed", completed_at: new Date().toISOString(), completed_count: newCount }).eq("id", assignmentId);
 
-    // Merge previous conversation log with current session's log
-    const mergedLog: { role: string; text: string; ts: number }[] = [];
-    if (previousConversationLogRef.current.length > 0) {
-      mergedLog.push(...previousConversationLogRef.current);
-      mergedLog.push({ role: "system", text: "--- Session Resumed ---", ts: Date.now() });
-    }
-    mergedLog.push(...conversationLogRef.current);
-
     if (user) {
-      if (currentSessionIdRef.current) {
-        // Update existing paused session → mark as completed with merged log
-        await supabase.from("speaking_sessions").update({
-          duration_seconds: totalSessionSeconds,
-          student_transcripts: userTranscriptsRef.current,
-          ai_transcripts: aiTranscriptsRef.current,
-          conversation_log: mergedLog,
-          session_state: { status: "completed" },
-        } as any).eq("id", currentSessionIdRef.current);
-      } else {
-        await supabase.from("speaking_sessions").insert({
-          student_id: user.id,
-          assignment_id: assignmentId,
-          duration_seconds: totalSessionSeconds,
-          student_transcripts: userTranscriptsRef.current,
-          ai_transcripts: aiTranscriptsRef.current,
-          conversation_log: mergedLog,
-          session_state: { status: "completed" },
-        } as any);
-      }
+      await supabase.from("speaking_sessions").insert({
+        student_id: user.id,
+        assignment_id: assignmentId,
+        duration_seconds: totalSessionSeconds,
+        student_transcripts: userTranscriptsRef.current,
+        ai_transcripts: aiTranscriptsRef.current,
+        conversation_log: conversationLogRef.current,
+        session_state: { status: "completed" },
+      } as any);
     }
 
     // Auto-show report after 20 seconds if user doesn't press Great Job
