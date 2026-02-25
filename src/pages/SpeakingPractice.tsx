@@ -232,7 +232,7 @@ function buildPhase3Instructions(verb: VerbData, difficultyLevel: string, speech
     "",
     "Each round — follow strictly:",
     "STEP 1 (Korean ONLY): Describe fun scenario in Korean. Ask '너라면 영어로 뭐라고 말할 것 같아?' WAIT.",
-    `STEP 2 (English): Acknowledge what they said + give a hint using "${verb.base_verb}" (1-2 words, NOT the full sentence). WAIT for student to try.`,
+    `STEP 2 (English): Acknowledge what they said. Then give a LONG, near-complete English sentence as a hint — leave only 1-2 words blank for the student to fill in. The hint must be a full sentence using "${verb.base_verb}", NOT just 1-2 words. WAIT for student to try completing it.`,
     "STEP 3: Listen to student's attempt. Correct and polish into a complete sentence. Give Korean meaning. Then say: 'Now say it after me!' and model the complete sentence. WAIT.",
     "STEP 4: Student repeats. Apply CORRECTION PROTOCOL if needed. Then ask them to say it ONE MORE TIME. WAIT.",
     "STEP 5: Student repeats again. Praise briefly in English.",
