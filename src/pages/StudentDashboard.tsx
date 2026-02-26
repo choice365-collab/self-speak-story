@@ -240,7 +240,7 @@ export default function StudentDashboard() {
                     disabled={isBlocked}
                     className="w-full mt-3 h-14 text-lg font-bold rounded-xl kid-shadow"
                   >
-                    {isBlocked ? "⛔ Daily Limit Reached" : a.completed_count > 0 ? "Practice Again 🔄" : a.status === "in_progress" ? "Continue ▶️" : "Start Practice 🎤"}
+                    {isBlocked ? "⛔ Daily Limit Reached" : a.completed_count > 0 ? "Practice Again 🔄" : "Start Practice 🎤"}
                   </Button>
                 </CardContent>
               </Card>
